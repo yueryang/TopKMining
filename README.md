@@ -8,10 +8,6 @@ Most of the top-$k$ mining algorithms are implemented via the Java programming l
 
 **Warning: Please always use ``TopKMining.java`` instead of any of the files under this directory if the algorithm is supported in this file. **
 
-### SPMF
-
-This a set of algorithms downloaded from the [SPMF](https://www.philippe-fournier-viger.com/spmf/index.php?link=download.php) platform. 
-
 ### THUI
 
 This is an extensive implementation of the original THUI algorithm, abstracted from the SPMF. 
@@ -59,19 +55,25 @@ More experimental options and file operations are provided.
 Extended experiments are merged. 
 **Data should be cut according to a fixed ratio if it is hard to test GUMM due to the limitation of computing memory. **
 
+### ``spmf.zip``
+
+This a set of algorithms downloaded from the [SPMF](https://www.philippe-fournier-viger.com/spmf/index.php?link=download.php) platform. 
+
 ## Datasets
 
-The following six famous datasets are included. 
+The following eight famous datasets are included. 
 
 - accidents
 - chess
+- connect
 - kosarak
 - mushroom
 - pumsb
+- pumsb_star
 - retail
 
-Example datasets used for algorithm debugging, testing, and tracking are proposed. 
-A Python script entitled ``generateTTFEDatasets.py`` is designed for 2D dataset generation. 
+Example datasets like ``sample.txt`` used for algorithm debugging, testing, and tracking are also proposed. 
+A Python script entitled ``datasetExtender.py`` is designed to extend multiple 1-dimensional datasets to one multi-dimensional dataset. 
 
 ## Literature
 
