@@ -7,14 +7,14 @@ on:
     paths:
       - '.github/workflows/runJava.yml'
       - 'TopKMining.java'
-      - 'datasets/*.txt'
+      - 'Datasets/*.txt'
   push:
     branches:
       - main
     paths:
       - '.github/workflows/runJava.yml'
       - 'TopKMining.java'
-      - 'datasets/*.txt'
+      - 'Datasets/*.txt'
   workflow_dispatch:
     inputs:
       testAccidents:
@@ -25,7 +25,7 @@ on:
       testChess:
         description: 'chess.txt'
         required: true
-        default: false
+        default: true
         type: boolean
       testConnect:
         description: 'connect.txt'
@@ -125,7 +125,7 @@ jobs:
             testSample="${{ github.event.inputs.testSample }}"
           else
             testAccidents="false"
-            testChess="false"
+            testChess="true"
             testConnect="false"
             testKosarak="false"
             testMushroom="false"
@@ -135,16 +135,21 @@ jobs:
             testSample="true"
           fi
           matrix=()
-          [[ "true" == "${testAccidents}" ]] && matrix+=("datasets/accidents.txt")
-          [[ "true" == "${testChess}" ]] && matrix+=("datasets/chess.txt")
-          [[ "true" == "${testConnect}" ]] && matrix+=("datasets/connect.txt")
-          [[ "true" == "${testKosarak}" ]] && matrix+=("datasets/kosarak.txt")
-          [[ "true" == "${testMushroom}" ]] && matrix+=("datasets/mushroom.txt")
-          [[ "true" == "${testPumsb}" ]] && matrix+=("datasets/pumsb.txt")
-          [[ "true" == "${testPumsbStar}" ]] && matrix+=("datasets/pumsb_star.txt")
-          [[ "true" == "${testRetail}" ]] && matrix+=("datasets/retail.txt")
-          [[ "true" == "${testSample}" ]] && matrix+=("datasets/sample.txt")
-          echo "matrix=$(printf '%s\n' "${matrix[@]}" | jq -R . | jq -s -c 'unique')" >> "${GITHUB_OUTPUT}"
+          [[ "true" == "${testAccidents}" ]] && matrix+=("Datasets/accidents.txt")
+          [[ "true" == "${testChess}" ]] && matrix+=("Datasets/chess.txt")
+          [[ "true" == "${testConnect}" ]] && matrix+=("Datasets/connect.txt")
+          [[ "true" == "${testKosarak}" ]] && matrix+=("Datasets/kosarak.txt")
+          [[ "true" == "${testMushroom}" ]] && matrix+=("Datasets/mushroom.txt")
+          [[ "true" == "${testPumsb}" ]] && matrix+=("Datasets/pumsb.txt")
+          [[ "true" == "${testPumsbStar}" ]] && matrix+=("Datasets/pumsb_star.txt")
+          [[ "true" == "${testRetail}" ]] && matrix+=("Datasets/retail.txt")
+          [[ "true" == "${testSample}" ]] && matrix+=("Datasets/sample.txt")
+          if [[ ${#matrix[@]} -ge 1 ]];
+          then
+            echo "matrix=$(printf '%s\n' "${matrix[@]}" | jq -R . | jq -s -c 'unique')" >> "${GITHUB_OUTPUT}"
+          else
+            echo "matrix=[]" >> "${GITHUB_OUTPUT}"
+          fi
   
   runJava:
     if: needs.prepare.outputs.matrix != '[]'
@@ -160,7 +165,7 @@ jobs:
         with:
           sparse-checkout: |
             TopKMining.java
-            datasets/
+            Datasets/
       
       - name: Prepare environment
         id: ready
