@@ -1,37 +1,286 @@
 name: Run Java
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'TopKMining.java'
-      - 'databases/**'
   pull_request:
     branches:
       - main
     paths:
+      - '.github/workflows/runJava.yml'
       - 'TopKMining.java'
-      - 'databases/**'
+      - 'datasets/*.txt'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/runJava.yml'
+      - 'TopKMining.java'
+      - 'datasets/*.txt'
+  workflow_dispatch:
+    inputs:
+      testAccidents:
+        description: 'accidents.txt'
+        required: true
+        default: false
+        type: boolean
+      testChess:
+        description: 'chess.txt'
+        required: true
+        default: false
+        type: boolean
+      testConnect:
+        description: 'connect.txt'
+        required: true
+        default: false
+        type: boolean
+      testKosarak:
+        description: 'kosarak.txt'
+        required: true
+        default: false
+        type: boolean
+      testMushroom:
+        description: 'mushroom.txt'
+        required: true
+        default: false
+        type: boolean
+      testPumsb:
+        description: 'pumsb.txt'
+        required: true
+        default: false
+        type: boolean
+      testPumsbStar:
+        description: 'pumsb_star.txt'
+        required: true
+        default: false
+        type: boolean
+      testRetail:
+        description: 'retail.txt'
+        required: true
+        default: false
+        type: boolean
+      testSample:
+        description: 'sample.txt'
+        required: true
+        default: true
+        type: boolean
+      javaVersion:
+        description: 'Java Version'
+        required: true
+        default: 25
+        type: choice
+        options:
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+          - 25
+          - 26
+      outputFormat:
+        description: 'Output format'
+        required: true
+        default: '.tsv'
+        type: choice
+        options:
+          - '.csv'
+          - '.htm'
+          - '.html'
+          - '.json'
+          - '.tex'
+          - '.tsv'
+          - '.xml'
+      runCount:
+        description: 'Run count'
+        required: true
+        default: '10'
+        type: string
 
 jobs:
-  build:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Prepare the matrix
+        id: matrix
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]];
+          then
+            testAccidents="${{ github.event.inputs.testAccidents }}"
+            testChess="${{ github.event.inputs.testChess }}"
+            testConnect="${{ github.event.inputs.testConnect }}"
+            testKosarak="${{ github.event.inputs.testKosarak }}"
+            testMushroom="${{ github.event.inputs.testMushroom }}"
+            testPumsb="${{ github.event.inputs.testPumsb }}"
+            testPumsbStar="${{ github.event.inputs.testPumsbStar }}"
+            testRetail="${{ github.event.inputs.testRetail }}"
+            testSample="${{ github.event.inputs.testSample }}"
+          else
+            testAccidents="false"
+            testChess="false"
+            testConnect="false"
+            testKosarak="false"
+            testMushroom="false"
+            testPumsb="false"
+            testPumsbStar="false"
+            testRetail="false"
+            testSample="true"
+          fi
+          matrix=()
+          [[ "true" == "${testAccidents}" ]] && matrix+=("datasets/accidents.txt")
+          [[ "true" == "${testChess}" ]] && matrix+=("datasets/chess.txt")
+          [[ "true" == "${testConnect}" ]] && matrix+=("datasets/connect.txt")
+          [[ "true" == "${testKosarak}" ]] && matrix+=("datasets/kosarak.txt")
+          [[ "true" == "${testMushroom}" ]] && matrix+=("datasets/mushroom.txt")
+          [[ "true" == "${testPumsb}" ]] && matrix+=("datasets/pumsb.txt")
+          [[ "true" == "${testPumsbStar}" ]] && matrix+=("datasets/pumsb_star.txt")
+          [[ "true" == "${testRetail}" ]] && matrix+=("datasets/retail.txt")
+          [[ "true" == "${testSample}" ]] && matrix+=("datasets/sample.txt")
+          echo "matrix=$(printf '%s\n' "${matrix[@]}" | jq -R . | jq -s -c 'unique')" >> "${GITHUB_OUTPUT}"
+  
+  runJava:
+    if: needs.prepare.outputs.matrix != '[]'
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dataset: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           sparse-checkout: |
             TopKMining.java
-            databases/
+            datasets/
       
-      - name: Set up JDK
-        uses: actions/setup-java@v5
-        with:
-          java-version: '25'
-          distribution: 'temurin'
-      
-      - name: Run the algorithm
+      - name: Prepare environment
+        id: ready
         run: |
           cd "${{ github.workspace }}"
-          java TopKMining.java -d databases/ttfe.txt -k 10
+          
+          # Run count #
+          strippedRunCountString="$(echo -n "${runCountString}" | tr -d '\t _')"
+          leadingSigns="${strippedRunCountString%%[!+-]*}"
+          minusCount=$(echo -n "${leadingSigns}" | tr -cd '-' | wc -c)
+          strippedRunCountString="${strippedRunCountString#$leadingSigns}"
+          if [[ "${strippedRunCountString:0:1}" =~ [0-9] ]];
+          then
+            case "${strippedRunCountString: -1}" in
+              'B'|'b')
+                radix=2
+                strippedRunCountString="${strippedRunCountString:0:-1}"
+                ;;
+              'Q'|'q')
+                radix=4
+                strippedRunCountString="${strippedRunCountString:0:-1}"
+                ;;
+              'O'|'o')
+                radix=8
+                strippedRunCountString="${strippedRunCountString:0:-1}"
+                ;;
+              'D'|'d')
+                radix=10
+                strippedRunCountString="${strippedRunCountString:0:-1}"
+                ;;
+              'X'|'x')
+                radix=16
+                strippedRunCountString="${strippedRunCountString:0:-1}"
+                ;;
+              *)
+                radix=10
+                ;;
+            esac
+          else
+            case "${strippedRunCountString:0:1}" in
+              'B'|'b')
+                radix=2
+                strippedRunCountString="${strippedRunCountString:1}"
+                ;;
+              'Q'|'q')
+                radix=4
+                strippedRunCountString="${strippedRunCountString:1}"
+                ;;
+              'O'|'o')
+                radix=8
+                strippedRunCountString="${strippedRunCountString:1}"
+                ;;
+              'D'|'d')
+                radix=10
+                strippedRunCountString="${strippedRunCountString:1}"
+                ;;
+              'X'|'x')
+                radix=16
+                strippedRunCountString="${strippedRunCountString:1}"
+                ;;
+              *)
+                radix=10
+                ;;
+            esac
+          fi
+          strippedRunCountString="$(echo "${strippedRunCountString}" | sed 's/^0*//')"
+          strippedRunCountString="${strippedRunCountString%%.*}"
+          runCount=10
+          { runCount=$((${radix}#$strippedRunCountString)); } 2>/dev/null
+          if (( minusCount % 2 == 1 ));
+          then
+            runCount=$(( -runCount ))
+          fi
+          if [[ ${runCount} -lt 1 ]];
+          then
+            runCount=10
+          fi
+          
+          mainFileName="$(basename "${{ matrix.dataset }}" | sed "s/\.[^.]*\$//g")"
+          timeString="HKT$(date '+%Y%m%d%H%M%S')"
+          outputFileName="${mainFileName}-Java${javaVersion}-r${runCount}-${timeString}${outputFormat}"
+          echo "Dataset: ${{ matrix.dataset }}"
+          echo "Java version: ${javaVersion}"
+          echo "Run count: ${runCountString} (${runCount})"
+          echo "Time string: ${timeString}"
+          echo "Output format: ${outputFormat}"
+          echo "Output file path: ${outputFileName}"
+          echo "javaVersion=${javaVersion}" >> "${GITHUB_OUTPUT}"
+          echo "runCount=${runCount}" >> "${GITHUB_OUTPUT}"
+          echo "timeString=${timeString}" >> "${GITHUB_OUTPUT}"
+          echo "outputFileName=${outputFileName}" >> "${GITHUB_OUTPUT}"
+        env:
+          javaVersion: ${{ github.event.inputs.javaVersion || 25 }}
+          runCountString: ${{ github.event.inputs.runCount || '10' }}
+          TZ: 'Asia/Hong_Kong'
+          outputFormat: ${{ github.event.inputs.outputFormat || '.tsv' }}
+      
+      - name: Set up JDK ${{ steps.ready.outputs.javaVersion }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ steps.ready.outputs.javaVersion }}
+          distribution: 'temurin'
+      
+      - name: Test on the dataset
+        run: |
+          cd "${{ github.workspace }}"
+          echo "The current working directory is \"$(pwd)\". "
+          if [[ -f "${{ matrix.dataset }}" ]];
+          then
+            echo "\$ java TopKMining.java -d \"${{ matrix.dataset }}\" -l debug -o \"${{ steps.ready.outputs.outputFileName }}\" -r ${{ steps.ready.outputs.runCount }}"
+            java TopKMining.java -d "${{ matrix.dataset }}" -l debug -o "${{ steps.ready.outputs.outputFileName }}" -r ${{ steps.ready.outputs.runCount }}
+          else
+            echo "Could not test on the dataset \"${{ matrix.dataset }}\" via Java. "
+            tree
+            exit 1
+          fi
+      
+      - name: Upload result
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ github.workspace }}/${{ steps.ready.outputs.outputFileName }}
+          archive: false
+          if-no-files-found: error
