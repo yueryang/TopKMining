@@ -20,7 +20,7 @@ on:
       testAccidents:
         description: 'accidents.txt'
         required: true
-        default: false
+        default: true
         type: boolean
       testChess:
         description: 'chess.txt'
@@ -30,32 +30,32 @@ on:
       testConnect:
         description: 'connect.txt'
         required: true
-        default: false
+        default: true
         type: boolean
       testKosarak:
         description: 'kosarak.txt'
         required: true
-        default: false
+        default: true
         type: boolean
       testMushroom:
         description: 'mushroom.txt'
         required: true
-        default: false
+        default: true
         type: boolean
       testPumsb:
         description: 'pumsb.txt'
         required: true
-        default: false
+        default: true
         type: boolean
       testPumsbStar:
         description: 'pumsb_star.txt'
         required: true
-        default: false
+        default: true
         type: boolean
       testRetail:
         description: 'retail.txt'
         required: true
-        default: false
+        default: true
         type: boolean
       testSample:
         description: 'sample.txt'
@@ -100,7 +100,7 @@ on:
       runCount:
         description: 'Run count'
         required: true
-        default: '10'
+        default: '1'
         type: string
 
 jobs:
@@ -124,14 +124,14 @@ jobs:
             testRetail="${{ github.event.inputs.testRetail }}"
             testSample="${{ github.event.inputs.testSample }}"
           else
-            testAccidents="false"
+            testAccidents="true"
             testChess="true"
-            testConnect="false"
-            testKosarak="false"
-            testMushroom="false"
-            testPumsb="false"
-            testPumsbStar="false"
-            testRetail="false"
+            testConnect="true"
+            testKosarak="true"
+            testMushroom="true"
+            testPumsb="true"
+            testPumsbStar="true"
+            testRetail="true"
             testSample="true"
           fi
           matrix=()
@@ -259,7 +259,7 @@ jobs:
           echo "outputFileName=${outputFileName}" >> "${GITHUB_OUTPUT}"
         env:
           javaVersion: ${{ github.event.inputs.javaVersion || 25 }}
-          runCountString: ${{ github.event.inputs.runCount || '10' }}
+          runCountString: ${{ github.event.inputs.runCount || '1' }}
           TZ: 'Asia/Hong_Kong'
           outputFormat: ${{ github.event.inputs.outputFormat || '.tsv' }}
       

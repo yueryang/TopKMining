@@ -96,35 +96,6 @@ class Formatter
 	}
 	public static String array2String(final Object[] arguments, final String prefix, final String separator, final String suffix) { return array2String(arguments, prefix, separator, suffix, null); }
 	public static String array2String(final Object[] arguments) { return array2String(arguments, "[", "|", "]", null); }
-	public static String arrayList2String(final ArrayList<?> arrayList, final String itemPrefix, final String itemSuffix)
-	{
-		if (null == arrayList || arrayList.isEmpty())
-			return "";
-		else
-		{
-			final int size = arrayList.size();
-			StringBuilder sb = new StringBuilder();
-			final String realItemPrefix = null == itemPrefix ? "" : itemPrefix, realItemSuffix = null == itemSuffix ? "" : itemSuffix;
-			switch (size)
-			{
-			case 0:
-				break;
-			case 1:
-				sb.append(realItemPrefix).append(arrayList.get(0)).append(realItemSuffix);
-				break;
-			case 2:
-				sb.append(realItemPrefix).append(arrayList.get(0)).append(realItemSuffix).append(" and ").append(realItemPrefix).append(arrayList.get(1)).append(realItemSuffix);
-				break;
-			default:
-				final int lastIndex = size - 1;
-				for (int i = 0; i < lastIndex; ++i)
-					sb.append(realItemPrefix).append(arrayList.get(i)).append(realItemSuffix).append(", ");
-				sb.append("and ").append(realItemPrefix).append(arrayList.get(lastIndex)).append(realItemSuffix);
-			}
-			return sb.toString();
-		}
-	}
-	public static String arrayList2String(final ArrayList<?> arrayList) { return arrayList2String(arrayList, "", ""); }
 	public static String escapeString(final Object object)
 	{
 		StringBuilder sb = new StringBuilder("\"");
@@ -161,6 +132,42 @@ class Formatter
 			}
 		sb.append("\"");
 		return sb.toString();
+	}
+	public static String arrayList2String(final ArrayList<?> arrayList, final String itemPrefix, final String itemSuffix)
+	{
+		if (null == arrayList || arrayList.isEmpty())
+			return "";
+		else
+		{
+			final int size = arrayList.size();
+			StringBuilder sb = new StringBuilder();
+			final String realItemPrefix = null == itemPrefix ? "" : itemPrefix, realItemSuffix = null == itemSuffix ? "" : itemSuffix;
+			switch (size)
+			{
+			case 0:
+				break;
+			case 1:
+				sb.append(realItemPrefix).append(arrayList.get(0)).append(realItemSuffix);
+				break;
+			case 2:
+				sb.append(realItemPrefix).append(arrayList.get(0)).append(realItemSuffix).append(" and ").append(realItemPrefix).append(arrayList.get(1)).append(realItemSuffix);
+				break;
+			default:
+				final int lastIndex = size - 1;
+				for (int i = 0; i < lastIndex; ++i)
+					sb.append(realItemPrefix).append(arrayList.get(i)).append(realItemSuffix).append(", ");
+				sb.append("and ").append(realItemPrefix).append(arrayList.get(lastIndex)).append(realItemSuffix);
+			}
+			return sb.toString();
+		}
+	}
+	public static String arrayList2String(final ArrayList<?> arrayList) { return arrayList2String(arrayList, "", ""); }
+	public static String filterMainFileName(final String filePath)
+	{
+		final String fileName = Paths.get(filePath).getFileName().toString();
+		final int dotIndex = fileName.lastIndexOf('.');
+		final String mainFileName = dotIndex >= 1 ? fileName.substring(0, dotIndex) : fileName;
+		return mainFileName.replaceAll("[^\\-0-9A-Za-z]", "");
 	}
 	public static String filterPrintableAsciiCharacters(final Object object)
 	{
@@ -214,6 +221,7 @@ class Parser
 	private static final String[] RunCountArguments = { "r", "/r", "-r", "runCount", "/runCount", "--runCount" };
 	
 	private String warnings = null;
+	private String traces = null;
 	private String logs = null;
 	private boolean exitFlag = false;
 	private String dataset = null;
@@ -491,15 +499,19 @@ class Parser
 			if (isIllegalDigitDetected)
 				issues.add("at least an illegal digit detected");
 			if (!issues.isEmpty())
-				this.warnings = "Parser: Parsed the runCount to " + this.runCount + " with " + Formatter.arrayList2String(issues) + ". ";
+				this.warnings = (
+					"Parser: Parsed the ``runCount = " + Formatter.escapeString(string) + "`` as ``runCount = "
+					+ this.runCount + "`` with " + Formatter.arrayList2String(issues) + ". "
+				);
 			else
-				this.logs = "Parser: Parsed the runCount to " + this.runCount + ". ";
+				this.traces = "Parser: Parsed the ``runCount = " + Formatter.escapeString(string) + "`` as ``runCount = " + this.runCount + "``. ";
 			return true;
 		}
 	}
 	public boolean parseArguments(final String[] arguments, final boolean resetBeforeParsing)
 	{
 		this.warnings = null;
+		this.traces = null;
 		this.logs = null;
 		this.exitFlag = false;
 		if (resetBeforeParsing)
@@ -567,7 +579,7 @@ class Parser
 			.append(Formatter.escapeString(this.outputFilePath)).append(". Parsed the run count as ").append(this.runCount).append(". ");
 		if (sb.length() >= 1)
 			this.logs = null == this.logs || this.logs.isEmpty() ? "Parser: " + sb.toString() : this.logs + sb.toString();
-		return this.dataset != null && !this.dataset.isEmpty();
+		return this.dataset != null && !this.dataset.isEmpty() && this.runCount >= 1;
 	}
 	public boolean parseArguments(String[] arguments) { return this.parseArguments(arguments, true); }
 	public boolean getExitFlag()
@@ -577,6 +589,10 @@ class Parser
 	public String getWarnings()
 	{
 		return this.warnings;
+	}
+	public String getTraces()
+	{
+		return this.traces;
 	}
 	public String getLogs()
 	{
@@ -590,15 +606,11 @@ class Parser
 	{
 		return this.logLevel;
 	}
-	public static int getDefaultRunCount()
-	{
-		return DefaultRunCount;
-	}
 	public String getDataset()
 	{
 		return this.dataset;
 	}
-	public Integer getRunCount()
+	public int getRunCount()
 	{
 		return this.runCount;
 	}
@@ -674,10 +686,10 @@ class Logger
 				System.err.println(WARNING_PROMPT + " " + content);
 				return true;
 			case Error:
-				System.err.println(ERROR_PROMPT + "[Error]" + " " + content);
+				System.err.println(ERROR_PROMPT + " " + content);
 				return true;
 			case Fatal:
-				System.err.println(FATAL_PROMPT + "[Fatal]" + " " + content);
+				System.err.println(FATAL_PROMPT + " " + content);
 				return true;
 			default:
 				return false;
@@ -689,18 +701,16 @@ class Logger
 
 abstract class Algorithm
 {
-	private static final double DefaultAlpha = 0.5, DefaultBeta = 0.5;
-	private static final Double DefaultDelta = null;
+	private static final double DefaultAlpha = 0.5, DefaultBeta = 0.5, DefaultDelta = Double.NEGATIVE_INFINITY;
 	private static final int DefaultK = 10;
 	
 	protected String inputFilePath = null;
-	protected double alpha = DefaultAlpha, beta = DefaultBeta;
-	protected Double delta = DefaultDelta;
+	protected double alpha = DefaultAlpha, beta = DefaultBeta, delta = DefaultDelta;
 	protected int k = DefaultK;
 	protected Logger logger = null;
 	protected long peakMemory = 0L;
 	
-	public Algorithm(final String inputFilePath, final double alpha, final double beta, final Double delta, final int k, final Logger logger)
+	public Algorithm(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
 		this.inputFilePath = inputFilePath;
 		this.alpha = alpha;
@@ -742,7 +752,7 @@ abstract class Algorithm
 
 class AlgorithmTHUFI extends Algorithm
 {
-	public AlgorithmTHUFI(final String inputFilePath, final double alpha, final double beta, final Double delta, final int k, final Logger logger)
+	public AlgorithmTHUFI(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
 		super(inputFilePath, alpha, beta, delta, k, logger);
 	}
@@ -756,25 +766,171 @@ class AlgorithmTHUFI extends Algorithm
 	}
 }
 
-class AlgorithmGUMM extends Algorithm
+class AlgorithmGUMM extends AlgorithmTTFE
 {
-	public AlgorithmGUMM(final String inputFilePath, final double alpha, final double beta, final Double delta, final int k, final Logger logger)
+	public AlgorithmGUMM(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
 		super(inputFilePath, alpha, beta, delta, k, logger);
-	}
-	@Override
-	public Number[] runAlgorithm()
-	{
-		final long startTime = System.nanoTime();
-		this.delta = 73.5;
-		final long endTime = System.nanoTime();
-		return new Number[] { endTime - startTime, this.peakMemory, this.delta };
+		this.switches = new boolean[] { false, false, false, false, false, false };
 	}
 }
 
 class AlgorithmTTFE extends Algorithm
 {
-	private boolean[] switches = { false, true, true, false, true, true };
+	private class TF
+	{
+		double threat, frequency, tf, rtf;
+		
+		TF(double threat, double frequency)
+		{
+			this.threat = threat;
+			this.frequency = frequency;
+			this.tf = alpha * threat + beta * frequency;
+		}
+	}
+	private class Transaction
+	{
+		int tid = 0;
+		LinkedHashMap<Integer, TF> events = new LinkedHashMap<>();
+		Double ttf = null;
+		
+		public Transaction(int tid)
+		{
+			this.tid = tid;
+		}
+		boolean contains(Integer item)
+		{
+			return this.events.containsKey(item);
+		}
+		boolean put(Integer item, TF tf)
+		{
+			if (this.events.containsKey(item))
+				return false;
+			else
+			{
+				events.put(item, tf);
+				return true;
+			}
+		}
+		boolean remove(Integer item)
+		{
+			if (events.containsKey(item))
+			{
+				events.remove(item);
+				return true;
+			}
+			else
+				return false;
+		}
+		boolean isSequence(ArrayList<Integer> seq)
+		{
+			int idx = index(seq.get(0));
+			if (idx == -1) return false;
+			for (int i = 1; i < seq.size(); ++i)
+				if (++idx != index(seq.get(i)))
+					return false;
+			return true;
+		}
+		int index(int event)
+		{
+			int idx = -1;
+			for (Map.Entry<Integer, TF> e : events.entrySet())
+			{
+				++idx;
+				if (e.getKey() == event)
+					return idx;
+			}
+			return -1;
+		}
+	}
+	private class Event
+	{
+		int event;
+		LinkedHashMap<Integer, TF> transactions = new LinkedHashMap<>();
+
+		Event(int event) { this.event = event; }
+	}
+	private class Table
+	{
+		String name;
+		int[] index, columns, sequence;
+		double[][] values;
+
+		Table(double[][] values, int[] index, int[] columns, String name)
+		{
+			this.values = values; this.index = index; this.columns = columns; this.name = name;
+			this.sequence = new int[index.length + 1];
+			this.sequence[0] = index[0];
+			for (int i = 0; i < columns.length; i++) this.sequence[i+1] = columns[i];
+		}
+
+		boolean addValueByName(int indexName, int columnName, double value)
+		{
+			int ci = -1, ii = -1;
+			for (int i = 0; i < columns.length; i++) if (columns[i] == columnName) { ci = i; break; }
+			for (int i = 0; i < index.length; i++) if (index[i] == indexName) { ii = i; break; }
+			if (ci == -1 || ii == -1) return false;
+			values[ii][ci] += value;
+			return true;
+		}
+
+		ArrayList<Integer> getMiddleElements(int p, int q, boolean inclusive)
+		{
+			ArrayList<Integer> arr = new ArrayList<>();
+			boolean add = false;
+			for (int elem : sequence)
+			{
+				if (elem == p) add = true;
+				else if (elem == q) { if (inclusive) arr.add(q); break; }
+				else if (add) arr.add(elem);
+			}
+			if (inclusive) arr.add(0, p);
+			return arr;
+		}
+	}
+	private class UElement
+	{
+		final int tid;
+		double iutils;
+		double rutils;
+
+		UElement(int tid, double iutils, double rutils)
+		{
+			this.tid = tid; this.iutils = iutils; this.rutils = rutils;
+		}
+	}
+	private class UList
+	{
+		Integer item;
+		double sumIutils = 0;
+		double sumRutils = 0;
+		ArrayList<UElement> elements = new ArrayList<>();
+
+		UList(Integer item) { this.item = item; }
+
+		void addElement(UElement e)
+		{
+			sumIutils += e.iutils;
+			sumRutils += e.rutils;
+			elements.add(e);
+		}
+	}
+	private class HTFE implements Comparable<HTFE>
+	{
+		ArrayList<Integer> sequence;
+		double eetf;
+
+		HTFE(ArrayList<Integer> seq, double eetf)
+		{
+			this.sequence = new ArrayList<>(seq);
+			this.eetf = eetf;
+		}
+
+		@Override
+		public int compareTo(HTFE o) { return Double.compare(this.eetf, o.eetf); }
+	}
+	
+	protected boolean[] switches = { false, true, true, false, true, true };
 	private final ArrayList<Transaction> transactions = new ArrayList<>();
 	private LinkedHashMap<Integer, Double> TWTF = new LinkedHashMap<>();
 	private int[] sequence = null;
@@ -786,135 +942,170 @@ class AlgorithmTTFE extends Algorithm
 	private final PriorityQueue<HTFE> finalResults = new PriorityQueue<>();
 	private int candidateCount = 0;
 	private final int BUFFERS_SIZE = 200;
-
-	public AlgorithmTTFE(final String inputFilePath, final double alpha, final double beta, final Double delta, final int k, final Logger logger)
+	
+	public AlgorithmTTFE(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
 		super(inputFilePath, alpha, beta, delta, k, logger);
 	}
+	
+	/* Child procedures */
+	private void savePattern(int[] prefix, int length, UList X)
+	{
+		ArrayList<Integer> seq = new ArrayList<>();
+		for (int i = 0; i < length; ++i)
+			seq.add(prefix[i]);
+		seq.add(X.item);
+		HTFE htfe = new HTFE(seq, X.sumIutils);
+		finalResults.offer(htfe);
+		while (finalResults.size() > this.k)
+		{
+			finalResults.poll();
+		}
+		if (finalResults.size() >= this.k)
+		{
+			delta = finalResults.peek().eetf;
+		}
+	}
+	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
+	{
+		for (int i = ULs.size() - 1; i >= 0; --i)
+		{
+			UList X = ULs.get(i);
+			if (X.sumIutils >= (Double.NEGATIVE_INFINITY == this.delta ? 0 : delta)) // do not prune if ``delta`` is ``Double.NEGATIVE_INFINITY``
+				savePattern(prefix, prefixLength, X);
+		}
+		for (int i = ULs.size() - 2; i >= 0; --i)
+		{
+			UList X = ULs.get(i);
+			if (X.sumIutils + X.sumRutils >= (Double.NEGATIVE_INFINITY == this.delta ? 0 : delta)) // do not prune if ``delta`` is ``Double.NEGATIVE_INFINITY``
+			{
+				ArrayList<UList> exULs = new ArrayList<>();
+				for (int j = i + 1; j < ULs.size(); ++j)
+				{
+					UList Y = ULs.get(j);
+					candidateCount++;
+					UList ex = construct(pUL, X, Y);
+					if (ex != null)
+						exULs.add(ex);
+				}
+				prefix[prefixLength] = X.item;
+				thui(prefix, prefixLength + 1, X, exULs);
+			}
+		}
+	}
+	private UList construct(UList P, UList px, UList py)
+	{
+		UList pxyUL = new UList(py.item);
+		double totUtil = px.sumIutils + px.sumRutils;
+		int ei = 0, ej = 0, Pi = -1;
+		while (ei < px.elements.size() && ej < py.elements.size())
+		{
+			UElement ex = px.elements.get(ei), ey = py.elements.get(ej);
+			if (ex.tid > ey.tid)
+			{
+				++ej;
+				continue;
+			}
+			if (ex.tid < ey.tid)
+			{
+				totUtil -= ex.iutils + ex.rutils;
+				if (totUtil < delta)
+					return null;
+				++ei;
+				if (P != null)
+					++Pi;
+				continue;
+			}
+			if (null == P)
+				pxyUL.addElement(new UElement(ex.tid, ex.iutils + ey.iutils, ey.rutils));
+			else
+			{
+				while (Pi < P.elements.size() && P.elements.get(++Pi).tid < ex.tid) ;
+				UElement e = P.elements.get(Pi);
+				pxyUL.addElement(new UElement(ex.tid, ex.iutils + ey.iutils - e.iutils, ey.rutils));
+			}
+			++ei;
+			++ej;
+		}
+		while (ei < px.elements.size())
+		{
+			UElement ex = px.elements.get(ei);
+			totUtil -= ex.iutils + ex.rutils;
+			if (totUtil < delta)
+				return null;
+			++ei;
+		}
+		return pxyUL;
+	}
+	
+	/* Main procedures */
 	private boolean loadDataset()
 	{
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(this.inputFilePath), StandardCharsets.UTF_8)))
 		{
 			String line = null;
 			int tid = 0;
+			boolean colonWarningFlag = false, countWarningFlag = false, parsingWarningFlag = false;
 			while ((line = reader.readLine()) != null)
 			{
 				line = line.trim();
 				if (!line.isEmpty() && '1' <= line.charAt(0) && line.charAt(0) <= '9')
 				{
-					Transaction trans = new Transaction(++tid, this.k, this.alpha, this.beta);
-					String[] parts = line.split(":");
-					if (parts.length < 3)
+					Transaction transaction = new Transaction(++tid);
+					final String[] parts = line.split(":");
+					if (parts.length >= 3)
 					{
-						this.logger.print("Skipped malformed line (missing ':'): " + line, LogLevel.Warning);
-						continue;
+						final String[] events = parts[0].trim().split("\\s+");
+						final String[] threats = parts[1].trim().split("\\s+");
+						final String[] frequencies = parts[2].trim().split("\\s+");
+						if (events.length == threats.length && events.length == frequencies.length)
+							try
+							{
+								double ttf = 0;
+								for (int i = 0; i < events.length; ++i)
+								{
+									int event = Integer.parseInt(events[i]);
+									double threat = Double.parseDouble(threats[i]);
+									ttf += this.alpha * threat;
+									double frequency = Double.parseDouble(frequencies[i]);
+									ttf += this.beta * frequency;
+									transaction.put(event, new TF(threat, frequency));
+								}
+								transaction.ttf = ttf;
+								transactions.add(transaction);
+							}
+							catch (Throwable e)
+							{
+								parsingWarningFlag = true;
+							}
+						else
+							countWarningFlag = true;
 					}
-					String[] items = parts[0].trim().split("\\s+");
-					String[] threats = parts[1].trim().split("\\s+");
-					String[] freqs = parts[2].trim().split("\\s+");
-					if (items.length != threats.length || items.length != freqs.length)
-					{
-						this.logger.print("Skipped line with mismatched item/threat/freq count: " + line, LogLevel.Warning);
-						continue;
-					}
-					try
-					{
-						for (int i = 0; i < items.length; ++i)
-						{
-							int item = Integer.parseInt(items[i]);
-							double threat = Double.parseDouble(threats[i]);
-							double freq = Double.parseDouble(freqs[i]);
-							trans.put(item, new TF(threat, freq, this.alpha, this.beta));
-						}
-						if (parts.length >= 4)
-						{
-							trans.ttf = Double.parseDouble(parts[3]);
-						}
-					}
-					catch (NumberFormatException e)
-					{
-						this.logger.print("Skipped line due to number format: " + line, LogLevel.Warning);
-						continue;
-					}
-					transactions.add(trans);
+					else
+						colonWarningFlag = true;
 				}
 			}
+			if (colonWarningFlag)
+				this.logger.print("One or more effective lines contain fewer than 3 colons, which have been skipped. ", LogLevel.Warning);
+			if (countWarningFlag)
+				this.logger.print("One or more effective lines contain inconsistent counts of events, threats, and frequencies, which have been skipped. ", LogLevel.Warning);
+			if (parsingWarningFlag)
+				this.logger.print("One or more effective lines contain failures in parsing numbers, which have been skipped. ", LogLevel.Warning);
+			return true;
+			
 		}
-		catch (Exception e)
+		catch (Throwable e)
 		{
-			this.logger.print("Failed to read dataset file: " + this.inputFilePath + " - " + e.getMessage(), LogLevel.Error);
+			this.logger.print("Failed to load the dataset " + Formatter.escapeString(this.inputFilePath) + " due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
 			return false;
 		}
-
-		if (Math.abs(this.alpha + this.beta - 1.0) > 1e-9)
-		{
-			this.logger.print("Alpha and beta do not sum to 1, normalizing.", LogLevel.Warning);
-			double sum = this.alpha + this.beta;
-			this.alpha /= sum;
-			this.beta /= sum;
-		}
-		if (this.delta != null)
-		{
-			this.delta = this.delta;
-		}
-		for (Transaction t : transactions)
-		{
-			if (t.ttf == null)
-			{
-				t.update(this.k, this.alpha, this.beta);
-			}
-		}
-		return true;
 	}
-
-	@Override
-	public Number[] runAlgorithm()
-	{
-		if (!this.loadDataset())
-		{
-			return new Number[] { null, null, null };
-		}
-		if (transactions.isEmpty())
-		{
-			this.logger.print("No transactions loaded, cannot run algorithm.", LogLevel.Error);
-			return new Number[] { null, null, null };
-		}
-		final long startTime = System.nanoTime();
-		try
-		{
-			computeTWTF();   this.checkMemory();
-			sortTWTF();      this.checkMemory();
-			computeRTF();    this.checkMemory();
-			computeETF();    this.checkMemory();
-			sortETF();       this.checkMemory();
-			pruneItem();     this.checkMemory();
-			sortTTFE();      this.checkMemory();
-			generateTable(); this.checkMemory();
-			if (switches[2]) { raiseThreshold_LETF_E(); this.checkMemory(); }
-			if (switches[3]) { raiseThreshold_LETF_LB(); this.checkMemory(); }
-			mineWithUtilityLists();
-			this.checkMemory();
-		}
-		catch (Exception e)
-		{
-			this.logger.print("Algorithm execution failed: " + e.getMessage(), LogLevel.Error);
-			return new Number[] { null, null, null };
-		}
-		final long endTime = System.nanoTime();
-		return new Number[] { endTime - startTime, this.peakMemory, this.delta };
-	}
-
 	private void computeTWTF()
 	{
-		for (Transaction t : transactions)
-		{
-			for (Integer item : t.events.keySet())
-			{
-				TWTF.put(item, TWTF.getOrDefault(item, 0.0) + t.ttf);
-			}
-		}
+		for (Transaction transaction : this.transactions)
+			for (Integer event : transaction.events.keySet())
+				this.TWTF.put(event, TWTF.getOrDefault(event, 0.0) + transaction.ttf);
 	}
-
 	private void sortTWTF()
 	{
 		ArrayList<Map.Entry<Integer, Double>> list = new ArrayList<>(TWTF.entrySet());
@@ -928,10 +1119,9 @@ class AlgorithmTTFE extends Algorithm
 			TWTF.put(e.getKey(), e.getValue());
 			sequence[i] = e.getKey();
 			events[i] = new Event(e.getKey());
-			i++;
+			++i;
 		}
 	}
-
 	private void computeRTF()
 	{
 		for (Transaction t : transactions)
@@ -952,7 +1142,6 @@ class AlgorithmTTFE extends Algorithm
 			}
 		}
 	}
-
 	private void computeETF()
 	{
 		for (Transaction t : transactions)
@@ -963,7 +1152,6 @@ class AlgorithmTTFE extends Algorithm
 			}
 		}
 	}
-
 	private void sortETF()
 	{
 		ArrayList<Map.Entry<Integer, Double>> list = new ArrayList<>(ETF.entrySet());
@@ -974,38 +1162,37 @@ class AlgorithmTTFE extends Algorithm
 		{
 			int idx = Math.min(this.k, list.size()) - 1;
 			double tmp = list.get(idx).getValue();
-			if (delta == null || tmp > delta) delta = tmp;
+			if (tmp > delta)
+				delta = tmp;
 		}
 	}
-
 	private void pruneItem()
 	{
 		LinkedHashMap<Integer, Double> newTWTF = new LinkedHashMap<>();
 		for (Map.Entry<Integer, Double> e : TWTF.entrySet())
 		{
-			if (delta == null || e.getValue() >= delta)
+			if (e.getValue() >= delta)
 				newTWTF.put(e.getKey(), e.getValue());
 			else
-				for (Transaction t : transactions) t.events.remove(e.getKey());
+				for (Transaction transaction : transactions)
+					transaction.events.remove(e.getKey());
 		}
 		TWTF = newTWTF;
 	}
-
 	private void sortTTFE()
 	{
-		for (int i = 0; i < transactions.size(); i++)
+		for (int i = 0; i < transactions.size(); ++i)
 		{
-			Transaction old = transactions.get(i);
-			Transaction newT = new Transaction(old.tid, old.topK, old.alpha, old.beta);
+			final Transaction oldTransaction = transactions.get(i);
+			Transaction newT = new Transaction(oldTransaction.tid);
 			for (Map.Entry<Integer, Double> e : TWTF.entrySet())
 			{
-				if (old.events.containsKey(e.getKey()))
-					newT.put(e.getKey(), old.events.get(e.getKey()));
+				if (oldTransaction.events.containsKey(e.getKey()))
+					newT.put(e.getKey(), oldTransaction.events.get(e.getKey()));
 			}
 			transactions.set(i, newT);
 		}
 	}
-
 	private void generateTable()
 	{
 		if (TWTF.isEmpty()) return;
@@ -1048,63 +1235,64 @@ class AlgorithmTTFE extends Algorithm
 			}
 		}
 	}
-
 	private void raiseThreshold_LETF_E()
 	{
-		if (LETF == null || LETF.values.length == 0) return;
-		int n = LETF.values.length;
-		letf_e.offer(LETF.values[n-1][n-1]);
-		for (int j = n-2; j >= 0; j--)
+		if (LETF != null && LETF.values.length >= 1)
 		{
-			for (int i = j; i >= 0 && letf_e.size() < this.k; i--)
+			final int n = LETF.values.length;
+			letf_e.offer(LETF.values[n - 1][n - 1]);
+			for (int j = n - 2; j >= 0; --j)
 			{
-				if (LETF.values[i][j+1] > LETF.values[j][j])
-					letf_e.offer(LETF.values[i][j+1]);
-				else
+				for (int i = j; i >= 0 && letf_e.size() < this.k; --i)
 				{
-					letf_e.offer(LETF.values[j][j]);
-					break;
+					if (LETF.values[i][j + 1] > LETF.values[j][j])
+						letf_e.offer(LETF.values[i][j + 1]);
+					else
+					{
+						letf_e.offer(LETF.values[j][j]);
+						break;
+					}
 				}
+				if (letf_e.size() >= this.k) break;
 			}
-			if (letf_e.size() >= this.k) break;
+			if (letf_e.size() >= this.k && letf_e.peek() > delta)
+				delta = letf_e.peek();
 		}
-		if (letf_e.size() >= this.k && (delta == null || letf_e.peek() > delta))
-			delta = letf_e.peek();
 	}
-
 	private void raiseThreshold_LETF_LB()
 	{
-		if (LETF == null || LETF.values.length == 0) return;
-		for (int i = 0; i < LETF.values.length; i++)
+		if (LETF != null && LETF.values.length >= 1)
 		{
-			for (int j = 0; j < LETF.values[i].length; j++)
+			for (int i = 0; i < LETF.values.length; ++i)
 			{
-				int p = LETF.index[i], q = LETF.columns[j];
-				ArrayList<Integer> mids = LETF.getMiddleElements(p, q, false);
-				double tmp = LETF.values[i][j];
-				for (int m = 0; m < 3 && m < mids.size(); m++)
+				for (int j = 0; j < LETF.values[i].length; ++j)
 				{
-					tmp -= ETF.get(mids.get(m));
-					if (delta == null || tmp > delta)
+					int p = LETF.index[i], q = LETF.columns[j];
+					ArrayList<Integer> mids = LETF.getMiddleElements(p, q, false);
+					double tmp = LETF.values[i][j];
+					for (int m = 0; m < 3 && m < mids.size(); ++m)
 					{
-						letf_lb.offer(tmp);
-						while (letf_lb.size() > this.k) letf_lb.poll();
+						tmp -= ETF.get(mids.get(m));
+						if (tmp > delta)
+						{
+							letf_lb.offer(tmp);
+							while (letf_lb.size() > this.k) letf_lb.poll();
+						}
+						else
+							break;
 					}
-					else
-						break;
 				}
 			}
+			if (letf_lb.size() >= this.k && letf_lb.peek() > delta)
+				delta = letf_lb.peek();
 		}
-		if (letf_lb.size() >= this.k && (delta == null || letf_lb.peek() > delta))
-			delta = letf_lb.peek();
 	}
-
-	private void mineWithUtilityLists()
+	private void mineWithEnumerationTree()
 	{
 		LinkedHashMap<Integer, UList> mapItemToUList = new LinkedHashMap<>();
 		for (int item : sequence)
 		{
-			if (TWTF.containsKey(item) && (delta == null || TWTF.get(item) >= delta))
+			if (TWTF.containsKey(item) && TWTF.get(item) >= delta)
 			{
 				UList ul = new UList(item);
 				mapItemToUList.put(item, ul);
@@ -1122,15 +1310,13 @@ class AlgorithmTTFE extends Algorithm
 			}
 			if (itemsInTrans.isEmpty()) continue;
 			double remaining = 0;
-			for (int i = itemsInTrans.size() - 1; i >= 0; i--)
+			for (int i = itemsInTrans.size() - 1; i >= 0; --i)
 			{
 				int item = itemsInTrans.get(i);
 				double ttf = trans.events.get(item).tf;
 				UList ul = mapItemToUList.get(item);
 				if (ul != null)
-				{
 					ul.addElement(new UElement(trans.tid, ttf, remaining));
-				}
 				remaining += ttf;
 			}
 		}
@@ -1139,279 +1325,46 @@ class AlgorithmTTFE extends Algorithm
 		{
 			UList ul = mapItemToUList.get(item);
 			if (ul != null && ul.elements.size() > 0)
-			{
 				listOfULists.add(ul);
-			}
 		}
 		int[] prefix = new int[BUFFERS_SIZE];
 		thui(prefix, 0, null, listOfULists);
 		mapItemToUList.clear();
 	}
-
-	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
+	@Override
+	public Number[] runAlgorithm()
 	{
-		for (int i = ULs.size() - 1; i >= 0; i--)
+		if (!this.loadDataset())
 		{
-			UList X = ULs.get(i);
-			if (X.sumIutils >= (delta == null ? 0 : delta))
-			{
-				savePattern(prefix, prefixLength, X);
-			}
+			return new Number[] { null, null, null };
 		}
-		for (int i = ULs.size() - 2; i >= 0; i--)
+		if (transactions.isEmpty())
 		{
-			UList X = ULs.get(i);
-			if (X.sumIutils + X.sumRutils >= (delta == null ? 0 : delta))
-			{
-				ArrayList<UList> exULs = new ArrayList<>();
-				for (int j = i + 1; j < ULs.size(); j++)
-				{
-					UList Y = ULs.get(j);
-					candidateCount++;
-					UList ex = construct(pUL, X, Y);
-					if (ex != null)
-					{
-						exULs.add(ex);
-					}
-				}
-				prefix[prefixLength] = X.item;
-				thui(prefix, prefixLength + 1, X, exULs);
-			}
+			this.logger.print("No transactions loaded, cannot run algorithm. ", LogLevel.Error);
+			return new Number[] { null, null, null };
 		}
-	}
-
-	private UList construct(UList P, UList px, UList py)
-	{
-		UList pxyUL = new UList(py.item);
-		double totUtil = px.sumIutils + px.sumRutils;
-		int ei = 0, ej = 0, Pi = -1;
-		while (ei < px.elements.size() && ej < py.elements.size())
+		final long startTime = System.nanoTime();
+		try
 		{
-			UElement ex = px.elements.get(ei);
-			UElement ey = py.elements.get(ej);
-			if (ex.tid > ey.tid)
-			{
-				ej++;
-				continue;
-			}
-			if (ex.tid < ey.tid)
-			{
-				totUtil -= ex.iutils + ex.rutils;
-				if (delta != null && totUtil < delta) return null;
-				ei++;
-				if (P != null) Pi++;
-				continue;
-			}
-			if (P == null)
-			{
-				pxyUL.addElement(new UElement(ex.tid, ex.iutils + ey.iutils, ey.rutils));
-			}
-			else
-			{
-				while (Pi < P.elements.size() && P.elements.get(++Pi).tid < ex.tid) ;
-				UElement e = P.elements.get(Pi);
-				pxyUL.addElement(new UElement(ex.tid, ex.iutils + ey.iutils - e.iutils, ey.rutils));
-			}
-			ei++; ej++;
+			this.computeTWTF();   this.checkMemory();
+			this.sortTWTF();      this.checkMemory();
+			this.computeRTF();    this.checkMemory();
+			this.computeETF();    this.checkMemory();
+			this.sortETF();       this.checkMemory();
+			this.pruneItem();     this.checkMemory();
+			this.sortTTFE();      this.checkMemory();
+			this.generateTable(); this.checkMemory();
+			if (switches[2]) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
+			if (switches[3]) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
+			this.mineWithEnumerationTree(); this.checkMemory();
 		}
-		while (ei < px.elements.size())
+		catch (Exception e)
 		{
-			UElement ex = px.elements.get(ei);
-			totUtil -= ex.iutils + ex.rutils;
-			if (delta != null && totUtil < delta) return null;
-			ei++;
+			this.logger.print("Algorithm execution failed: " + e.getMessage(), LogLevel.Error);
+			return new Number[] { null, null, null };
 		}
-		return pxyUL;
-	}
-
-	private void savePattern(int[] prefix, int length, UList X)
-	{
-		ArrayList<Integer> seq = new ArrayList<>();
-		for (int i = 0; i < length; i++)
-		{
-			seq.add(prefix[i]);
-		}
-		seq.add(X.item);
-		HTFE htfe = new HTFE(seq, X.sumIutils);
-		finalResults.offer(htfe);
-		while (finalResults.size() > this.k)
-		{
-			finalResults.poll();
-		}
-		if (finalResults.size() >= this.k)
-		{
-			delta = finalResults.peek().eetf;
-		}
-	}
-
-	private class TF
-	{
-		double threat, frequency, tf, rtf;
-
-		TF(double threat, double frequency, double alpha, double beta)
-		{
-			this.threat = threat; this.frequency = frequency;
-			this.tf = alpha * threat + beta * frequency;
-		}
-
-		void update(double alpha, double beta)
-		{
-			this.tf = alpha * threat + beta * frequency;
-		}
-	}
-
-	private class Transaction
-	{
-		int tid, topK;
-		double alpha, beta;
-		LinkedHashMap<Integer, TF> events = new LinkedHashMap<>();
-		Double ttf = null;
-
-		Transaction(int tid, int topK, double alpha, double beta)
-		{
-			this.tid = tid; this.topK = topK; this.alpha = alpha; this.beta = beta;
-		}
-
-		boolean contains(Integer item) { return events.containsKey(item); }
-
-		boolean put(Integer item, TF tf)
-		{
-			if (events.containsKey(item)) return false;
-			events.put(item, tf);
-			return true;
-		}
-
-		boolean remove(Integer item)
-		{
-			if (!events.containsKey(item)) return false;
-			events.remove(item);
-			return true;
-		}
-
-		double update(int topK, double alpha, double beta)
-		{
-			this.topK = topK; this.alpha = alpha; this.beta = beta;
-			ttf = 0.0;
-			for (Map.Entry<Integer, TF> e : events.entrySet())
-			{
-				e.getValue().update(alpha, beta);
-				ttf += e.getValue().tf;
-			}
-			return ttf;
-		}
-
-		boolean isSequence(ArrayList<Integer> seq)
-		{
-			int idx = index(seq.get(0));
-			if (idx == -1) return false;
-			for (int i = 1; i < seq.size(); i++)
-			{
-				if (++idx != index(seq.get(i))) return false;
-			}
-			return true;
-		}
-
-		int index(int event)
-		{
-			int idx = -1;
-			for (Map.Entry<Integer, TF> e : events.entrySet())
-			{
-				idx++;
-				if (e.getKey() == event) return idx;
-			}
-			return -1;
-		}
-	}
-
-	private class Event
-	{
-		int event;
-		LinkedHashMap<Integer, TF> transactions = new LinkedHashMap<>();
-
-		Event(int event) { this.event = event; }
-	}
-
-	private class Table
-	{
-		String name;
-		int[] index, columns, sequence;
-		double[][] values;
-
-		Table(double[][] values, int[] index, int[] columns, String name)
-		{
-			this.values = values; this.index = index; this.columns = columns; this.name = name;
-			this.sequence = new int[index.length + 1];
-			this.sequence[0] = index[0];
-			for (int i = 0; i < columns.length; i++) this.sequence[i+1] = columns[i];
-		}
-
-		boolean addValueByName(int indexName, int columnName, double value)
-		{
-			int ci = -1, ii = -1;
-			for (int i = 0; i < columns.length; i++) if (columns[i] == columnName) { ci = i; break; }
-			for (int i = 0; i < index.length; i++) if (index[i] == indexName) { ii = i; break; }
-			if (ci == -1 || ii == -1) return false;
-			values[ii][ci] += value;
-			return true;
-		}
-
-		ArrayList<Integer> getMiddleElements(int p, int q, boolean inclusive)
-		{
-			ArrayList<Integer> arr = new ArrayList<>();
-			boolean add = false;
-			for (int elem : sequence)
-			{
-				if (elem == p) add = true;
-				else if (elem == q) { if (inclusive) arr.add(q); break; }
-				else if (add) arr.add(elem);
-			}
-			if (inclusive) arr.add(0, p);
-			return arr;
-		}
-	}
-
-	private class UElement
-	{
-		final int tid;
-		double iutils;
-		double rutils;
-
-		UElement(int tid, double iutils, double rutils)
-		{
-			this.tid = tid; this.iutils = iutils; this.rutils = rutils;
-		}
-	}
-
-	private class UList
-	{
-		Integer item;
-		double sumIutils = 0;
-		double sumRutils = 0;
-		ArrayList<UElement> elements = new ArrayList<>();
-
-		UList(Integer item) { this.item = item; }
-
-		void addElement(UElement e)
-		{
-			sumIutils += e.iutils;
-			sumRutils += e.rutils;
-			elements.add(e);
-		}
-	}
-
-	private class HTFE implements Comparable<HTFE>
-	{
-		ArrayList<Integer> sequence;
-		double eetf;
-
-		HTFE(ArrayList<Integer> seq, double eetf)
-		{
-			this.sequence = new ArrayList<>(seq);
-			this.eetf = eetf;
-		}
-
-		@Override
-		public int compareTo(HTFE o) { return Double.compare(this.eetf, o.eetf); }
+		final long endTime = System.nanoTime();
+		return new Number[] { endTime - startTime, this.peakMemory, this.delta };
 	}
 }
 
@@ -1458,12 +1411,16 @@ class Saver
 			final int realLeftClosing = Math.max(0, leftClosing), realRightOpening = Math.min(rightOpening, results.length);
 			for (int rIndex = realLeftClosing; rIndex < realRightOpening; ++rIndex)
 				writer.write(Formatter.array2String(results[rIndex], "", ",", LINE_SEPARATOR, r -> Formatter.escapeCSV(Formatter.filterPrintableAsciiCharacters(r))));
-			this.logger.print("Saver: Successfully saved the results to " + this.escapedOutputFilePath + ". ", LogLevel.Info);
+			this.logger.print("Saver: Successfully saved the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath + " in the CSV format. ", LogLevel.Info);
 			return true;
 		}
 		catch (Throwable e)
 		{
-			this.logger.print("Saver: Failed to save the results to " + this.escapedOutputFilePath + " due to " + Formatter.escapeString(e.toString()) + ". ", LogLevel.Error);
+			this.logger.print(
+				"Saver: Failed to save the results[" + leftClosing + ":" + rightOpening + "] to "
+				+ this.escapedOutputFilePath + " in the CSV format due to " + Formatter.escapeString(e) + ". ", 
+				LogLevel.Error
+			);
 			this.displayOnConsole(results, leftClosing, rightOpening);
 			return false;
 		}
@@ -1508,12 +1465,16 @@ class Saver
 			writer.write("\t\t</table>" + LINE_SEPARATOR);
 			writer.write("\t</body>" + LINE_SEPARATOR);
 			writer.write("</html>");
-			this.logger.print("Saver: Successfully saved the results to " + this.escapedOutputFilePath + ". ", LogLevel.Info);
+			this.logger.print("Saver: Successfully saved the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath + "in the HTM(L) format. ", LogLevel.Info);
 			return true;
 		}
 		catch (Throwable e)
 		{
-			this.logger.print("Saver: Failed to save the results to " + this.escapedOutputFilePath + " due to " + Formatter.escapeString(e.toString()) + ". ", LogLevel.Error);
+			this.logger.print(
+				"Saver: Failed to save the results[" + leftClosing + ":" + rightOpening + "] to "
+				+ this.escapedOutputFilePath + " in the HTM(L) format due to " + Formatter.escapeString(e) + ". ", 
+				LogLevel.Error
+			);
 			this.displayOnConsole(results, leftClosing, rightOpening);
 			return false;
 		}
@@ -1544,12 +1505,16 @@ class Saver
 				}
 			writer.write("\t]" + LINE_SEPARATOR);
 			writer.write("}");
-			this.logger.print("Saver: Successfully saved the results to " + this.escapedOutputFilePath + ". ", LogLevel.Info);
+			this.logger.print("Saver: Successfully saved the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath + "in the JSON format. ", LogLevel.Info);
 			return true;
 		}
 		catch (Throwable e)
 		{
-			this.logger.print("Saver: Failed to save the results to " + this.escapedOutputFilePath + " due to " + Formatter.escapeString(e.toString()) + ". ", LogLevel.Error);
+			this.logger.print(
+				"Saver: Failed to save the results[" + leftClosing + ":" + rightOpening + "] to "
+				+ this.escapedOutputFilePath + " in the JSON format due to " + Formatter.escapeString(e) + ". ", 
+				LogLevel.Error
+			);
 			this.displayOnConsole(results, leftClosing, rightOpening);
 			return false;
 		}
@@ -1574,12 +1539,16 @@ class Saver
 				writer.write("\t</result>" + LINE_SEPARATOR);
 			}
 			writer.write("</results>");
-			this.logger.print("Saver: Successfully saved the results to " + this.escapedOutputFilePath + ". ", LogLevel.Info);
+			this.logger.print("Saver: Successfully saved the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath + "in the XML format. ", LogLevel.Info);
 			return true;
 		}
 		catch (Throwable e)
 		{
-			this.logger.print("Saver: Failed to save the results to " + this.escapedOutputFilePath + " due to " + Formatter.escapeString(e.toString()) + ". ", LogLevel.Error);
+			this.logger.print(
+				"Saver: Failed to save the results[" + leftClosing + ":" + rightOpening + "] to "
+				+ this.escapedOutputFilePath + " in the XML format due to " + Formatter.escapeString(e) + ". ", 
+				LogLevel.Error
+			);
 			this.displayOnConsole(results, leftClosing, rightOpening);
 			return false;
 		}
@@ -1606,12 +1575,16 @@ class Saver
 			writer.write("\\end{tabular}");
 			writer.write("\\end{sidewaystable}");
 			writer.write("\\end{document}");
-			this.logger.print("Saver: Successfully saved the results to " + this.escapedOutputFilePath + ". ", LogLevel.Info);
+			this.logger.print("Saver: Successfully saved the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath + "in the TEX format. ", LogLevel.Info);
 			return true;
 		}
 		catch (Throwable e)
 		{
-			this.logger.print("Saver: Failed to save the results to " + this.escapedOutputFilePath + " due to " + Formatter.escapeString(e.toString()) + ". ", LogLevel.Error);
+			this.logger.print(
+				"Saver: Failed to save the results[" + leftClosing + ":" + rightOpening + "] to "
+				+ this.escapedOutputFilePath + " in the TEX format due to " + Formatter.escapeString(e) + ". ", 
+				LogLevel.Error
+			);
 			this.displayOnConsole(results, leftClosing, rightOpening);
 			return false;
 		}
@@ -1624,12 +1597,16 @@ class Saver
 			final int realLeftClosing = Math.max(0, leftClosing), realRightOpening = Math.min(rightOpening, results.length);
 			for (int rIndex = realLeftClosing; rIndex < realRightOpening; ++rIndex)
 				writer.write(Formatter.array2String(results[rIndex], "", "\t", System.lineSeparator(), r -> Formatter.filterPrintableAsciiCharacters(r)));
-			this.logger.print("Saver: Successfully saved the results to " + this.escapedOutputFilePath + ". ", LogLevel.Info);
+			this.logger.print("Saver: Successfully saved the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath + "in the TSV format. ", LogLevel.Info);
 			return true;
 		}
 		catch (Throwable e)
 		{
-			this.logger.print("Saver: Failed to save the results to " + this.escapedOutputFilePath + " due to " + Formatter.escapeString(e.toString()) + ". ", LogLevel.Error);
+			this.logger.print(
+				"Saver: Failed to save the results[" + leftClosing + ":" + rightOpening + "] to "
+				+ this.escapedOutputFilePath + " in the TSV format due to " + Formatter.escapeString(e) + ". ", 
+				LogLevel.Error
+			);
 			this.displayOnConsole(results, leftClosing, rightOpening);
 			return false;
 		}
@@ -1671,13 +1648,6 @@ public class TopKMining
 	final static int EOF = (-1);
 	final static double EPSILON = 0.0001;
 	
-	private static String filterMainFileName(final String filePath)
-	{
-		final String fileName = Paths.get(filePath).getFileName().toString();
-		final int dotIndex = fileName.lastIndexOf('.');
-		final String mainFileName = dotIndex >= 1 ? fileName.substring(0, dotIndex) : fileName;
-		return mainFileName.replaceAll("[^\\-0-9A-Za-z]", "");
-	}
 	private static boolean checkComplexity(final Number number)
 	{
 		return number != null && (long)number >= 1;
@@ -1701,25 +1671,26 @@ public class TopKMining
 			System.exit(EXIT_SUCCESS);
 		else
 		{
-			final String warnings = parser.getWarnings();
-			final String logs = parser.getLogs();
+			final String warnings = parser.getWarnings(), traces = parser.getTraces(), logs = parser.getLogs();
 			final Logger logger = new Logger(parser.getLogLevel());
 			if (warnings != null && !warnings.isEmpty())
 				logger.print(warnings, LogLevel.Warning);
+			if (traces != null && !traces.isEmpty())
+				logger.print(traces, LogLevel.Trace);
 			if (logs != null && !logs.isEmpty())
 				logger.print(logs, LogLevel.Debug);
+			final String dataset = parser.getDataset();
+			final int runCount = parser.getRunCount();
 			if (flag)
 			{
 				/* Parameters */
-				final String dataset = parser.getDataset();
 				LinkedHashMap<String, Function<Number[], Algorithm>> algorithms = new LinkedHashMap<>();
 				algorithms.put("THUFI", parameters -> new AlgorithmTHUFI(dataset, (double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
 				algorithms.put("GUMM", parameters -> new AlgorithmGUMM(dataset, (double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
 				algorithms.put("TTFE", parameters -> new AlgorithmTTFE(dataset, (double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
 				final double[] alphaValues = { 0, 0.25, 0.5, 0.75, 1 };
-				final Double[] deltaValues = new Double[] { null };
+				final double[] deltaValues = { Double.NEGATIVE_INFINITY };
 				final int[] kValues = { 5, 10, 50, 100, 500, 1000, 5000, 10000 };
-				final int runCount = parser.getRunCount();
 				
 				/* Algorithms */
 				Number[] parameters = new Number[] { null, null, null, null };
@@ -1727,7 +1698,7 @@ public class TopKMining
 				final int length = columns.length, metricLength = 3;
 				Object[][] results = new Object[algorithms.size() * alphaValues.length * deltaValues.length * kValues.length][length];
 				int outerIndex = 0;
-				final String datasetName = filterMainFileName(dataset);
+				final String datasetName = Formatter.filterMainFileName(dataset);
 				Saver saver = new Saver(parser.getOutputFilePath(), columns, logger);
 				for (Map.Entry<String, Function<Number[], Algorithm>> entry : algorithms.entrySet())
 				{
@@ -1738,7 +1709,7 @@ public class TopKMining
 						parameters[0] = alpha;
 						final double beta = 1 - alpha;
 						parameters[1] = beta;
-						for (final Double delta : deltaValues)
+						for (final double delta : deltaValues)
 						{
 							parameters[2] = delta;
 							for (final int k : kValues)
@@ -1806,7 +1777,13 @@ public class TopKMining
 			}
 			else
 			{
-				logger.print("The path to the dataset must be specified.", LogLevel.Fatal);
+				if ((null == dataset || dataset.isEmpty()) ^ (runCount < 1))
+					if (runCount < 1)
+						logger.print("The run count must be a positive integer. ", LogLevel.Fatal);
+					else
+						logger.print("A path to the dataset must be specified. ", LogLevel.Fatal);
+				else
+					logger.print("A path to the dataset must be specified, and the run count must be a positive integer. ", LogLevel.Fatal);
 				System.exit(EOF);
 			}
 		}
