@@ -2,12 +2,41 @@
 
 This repository serves as a systematic collection of multiple top-$k$ mining algorithms. 
 
+The structure of this repository is as follows. 
+
+- ``TopKMining.java``
+- Algorithms
+  - THUI
+  - THUFI
+  - TFUI
+  - TTFE
+    - TTFE_v1
+    - TTFE_v2
+    - TTFE_v3
+    - TTFE_v4
+    - TTFE_v5
+- Datasets
+  - ...
+- Literature
+  - ...
+
+## ``TopKMining.java``
+
+This is the official implementation of the TTFE algorithm, along with its baselines. 
+
+Except for the parameter loops, users can control behaviors via the command-line arguments (e.g., the dataset, the output file path, and the run count). 
+Regarding the command-line arguments, please execute ``java TopKMining.java -h`` after navigating (``cd`` or ``cd /d``) into the root directory of this repository. 
+
+This Java implementation is designed for experimental purposes. No mined top-$k$ patterns and values will be saved or displayed by default. 
+If it is necessary to save or display the mined top-$k$ patterns and values, please adjust the code manually or use the directory entitled ``Algorithms``. 
+For teaching purposes, please execute the algorithms under the directory entitled ``Algorithms`` according to the following statements. 
+
 ## Algorithms
 
 Most of the top-$k$ mining algorithms are implemented via the Java programming language. 
 
 **Warning: Please always use ``TopKMining.java`` instead of any of the files under this directory for experimental purposes if the algorithm is supported in ``TopKMining.java``.** 
-**For historical versions, all the algorithms here will no longer be maintained.** 
+**For historical versions, all the algorithms under this directory will no longer be maintained.** 
 
 ### THUI
 

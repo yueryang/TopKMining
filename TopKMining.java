@@ -233,7 +233,7 @@ class Parser
 	{
 		
 	}
-	private static boolean contains(final String[] array, final String target)
+	private static boolean containing(final String[] array, final String target)
 	{
 		if (null == array || 0 == array.length || null == target)
 			return false;
@@ -527,23 +527,23 @@ class Parser
 		{
 			if (null == arguments[i])
 				invalidArgumentIndexes.add(i);
-			else if (this.contains(HelpArguments, arguments[i]))
+			else if (containing(HelpArguments, arguments[i]))
 			{
-				this.printHelp();
+				printHelp();
 				this.exitFlag = true;
 				return true;
 			}
-			else if (this.contains(DatasetArguments, arguments[i]))
+			else if (containing(DatasetArguments, arguments[i]))
 				if (++i < arguments.length)
 					this.dataset = arguments[i];
 				else
 					missingArgument = true;
-			else if (this.contains(OutputFilePathArguments, arguments[i]))
+			else if (containing(OutputFilePathArguments, arguments[i]))
 				if (++i < arguments.length)
 					this.outputFilePath = arguments[i];
 				else
 					missingArgument = true;
-			else if (this.contains(RunCountArguments, arguments[i]))
+			else if (containing(RunCountArguments, arguments[i]))
 				if (++i < arguments.length)
 				{
 					if (!this.parseRunCount(arguments[i]))
@@ -551,7 +551,7 @@ class Parser
 				}
 				else
 					missingArgument = true;
-			else if (this.contains(LogLevelArguments, arguments[i]))
+			else if (containing(LogLevelArguments, arguments[i]))
 				if (++i < arguments.length)
 				{
 					if (!this.parseLogLevel(arguments[i]))
@@ -736,6 +736,10 @@ abstract class Algorithm
 		}
 		checkMemory();
 	}
+	public static double getDefaultAlpha()
+	{
+		return DefaultAlpha;
+	}
 	protected final boolean checkMemory()
 	{
 		final long currentMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
@@ -750,8 +754,677 @@ abstract class Algorithm
 	public abstract Number[] runAlgorithm();
 }
 
+class AlgorithmTHUI extends Algorithm
+{
+	private class ItemInfo
+	{
+		double utility, rtf;
+		
+		ItemInfo(double utility)
+		{
+			this.utility = utility;
+			this.rtf = 0.0;
+		}
+	}
+
+	private class Transaction
+	{
+		int tid = 0;
+		LinkedHashMap<Integer, ItemInfo> items = new LinkedHashMap<>();
+		Double ttf = null;
+		
+		public Transaction(int tid)
+		{
+			this.tid = tid;
+		}
+		boolean contains(Integer item)
+		{
+			return this.items.containsKey(item);
+		}
+		boolean put(Integer item, ItemInfo info)
+		{
+			if (this.items.containsKey(item))
+				return false;
+			else
+			{
+				items.put(item, info);
+				return true;
+			}
+		}
+		boolean remove(Integer item)
+		{
+			if (items.containsKey(item))
+			{
+				items.remove(item);
+				return true;
+			}
+			else
+				return false;
+		}
+		boolean isSequence(ArrayList<Integer> seq)
+		{
+			int idx = index(seq.get(0));
+			if (idx == -1) return false;
+			for (int i = 1; i < seq.size(); ++i)
+				if (++idx != index(seq.get(i)))
+					return false;
+			return true;
+		}
+		int index(int item)
+		{
+			int idx = -1;
+			for (Map.Entry<Integer, ItemInfo> e : items.entrySet())
+			{
+				++idx;
+				if (e.getKey() == item)
+					return idx;
+			}
+			return -1;
+		}
+	}
+
+	private class ItemEvent
+	{
+		int item;
+		LinkedHashMap<Integer, ItemInfo> transactions = new LinkedHashMap<>();
+
+		ItemEvent(int item) { this.item = item; }
+	}
+
+	private class Table
+	{
+		String name;
+		int[] index, columns, sequence;
+		double[][] values;
+
+		Table(double[][] values, int[] index, int[] columns, String name)
+		{
+			this.values = values; this.index = index; this.columns = columns; this.name = name;
+			this.sequence = new int[index.length + 1];
+			this.sequence[0] = index[0];
+			for (int i = 0; i < columns.length; ++i) this.sequence[i+1] = columns[i];
+		}
+
+		boolean addValueByName(int indexName, int columnName, double value)
+		{
+			int ci = -1, ii = -1;
+			for (int i = 0; i < columns.length; ++i) if (columns[i] == columnName) { ci = i; break; }
+			for (int i = 0; i < index.length; ++i) if (index[i] == indexName) { ii = i; break; }
+			if (ci == -1 || ii == -1) return false;
+			values[ii][ci] += value;
+			return true;
+		}
+
+		ArrayList<Integer> getMiddleElements(int p, int q, boolean inclusive)
+		{
+			ArrayList<Integer> arr = new ArrayList<>();
+			boolean add = false;
+			for (int elem : sequence)
+			{
+				if (elem == p) add = true;
+				else if (elem == q) { if (inclusive) arr.add(q); break; }
+				else if (add) arr.add(elem);
+			}
+			if (inclusive) arr.add(0, p);
+			return arr;
+		}
+	}
+
+	private class UElement
+	{
+		final int tid;
+		double iutils;
+		double rutils;
+
+		UElement(int tid, double iutils, double rutils)
+		{
+			this.tid = tid; this.iutils = iutils; this.rutils = rutils;
+		}
+	}
+
+	private class UList
+	{
+		Integer item;
+		double sumIutils = 0;
+		double sumRutils = 0;
+		ArrayList<UElement> elements = new ArrayList<>();
+
+		UList(Integer item) { this.item = item; }
+
+		void addElement(UElement e)
+		{
+			sumIutils += e.iutils;
+			sumRutils += e.rutils;
+			elements.add(e);
+		}
+	}
+
+	private class HTFE implements Comparable<HTFE>
+	{
+		ArrayList<Integer> sequence;
+		double eetf;
+
+		HTFE(ArrayList<Integer> seq, double eetf)
+		{
+			this.sequence = new ArrayList<>(seq);
+			this.eetf = eetf;
+		}
+
+		@Override
+		public int compareTo(HTFE o) { return Double.compare(this.eetf, o.eetf); }
+	}
+	
+	static private int DefaultColumnIndex = 2;
+	
+	private int columnIndex = DefaultColumnIndex;
+	private boolean[] switches = { false, true, false, false, false, false };
+	private final ArrayList<Transaction> transactions = new ArrayList<>();
+	private LinkedHashMap<Integer, Double> TWTF = new LinkedHashMap<>();
+	private int[] sequence = null;
+	private ItemEvent[] itemEvents = null;
+	private LinkedHashMap<Integer, Double> ETF = new LinkedHashMap<>();
+	private Table LETF = null;
+	private final PriorityQueue<Double> letf_e = new PriorityQueue<>();
+	private final PriorityQueue<Double> letf_lb = new PriorityQueue<>();
+	private final PriorityQueue<HTFE> finalResults = new PriorityQueue<>();
+	private int candidateCount = 0;
+	private final int BUFFERS_SIZE = 200;
+	
+	public AlgorithmTHUI(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	{
+		super(inputFilePath, alpha, beta, delta, k, logger);
+	}
+	public boolean setColumnIndex(final int index)
+	{
+		if (index >= 1)
+		{
+			this.columnIndex = index;
+			return true;
+		}
+		else
+			return false;
+	}
+	
+	/* Child procedures */
+	private void savePattern(int[] prefix, int length, UList X)
+	{
+		ArrayList<Integer> seq = new ArrayList<>();
+		for (int i = 0; i < length; ++i)
+			seq.add(prefix[i]);
+		seq.add(X.item);
+		HTFE htfe = new HTFE(seq, X.sumIutils);
+		finalResults.offer(htfe);
+		while (finalResults.size() > this.k)
+		{
+			finalResults.poll();
+		}
+		if (finalResults.size() >= this.k)
+		{
+			delta = finalResults.peek().eetf;
+		}
+	}
+
+	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
+	{
+		for (int i = ULs.size() - 1; i >= 0; --i)
+		{
+			UList X = ULs.get(i);
+			if (X.sumIutils >= (Double.NEGATIVE_INFINITY == this.delta ? 0 : delta))
+				savePattern(prefix, prefixLength, X);
+		}
+		for (int i = ULs.size() - 2; i >= 0; --i)
+		{
+			UList X = ULs.get(i);
+			if (X.sumIutils + X.sumRutils >= (Double.NEGATIVE_INFINITY == this.delta ? 0 : delta))
+			{
+				ArrayList<UList> exULs = new ArrayList<>();
+				for (int j = i + 1; j < ULs.size(); ++j)
+				{
+					UList Y = ULs.get(j);
+					candidateCount++;
+					UList ex = construct(pUL, X, Y);
+					if (ex != null)
+						exULs.add(ex);
+				}
+				prefix[prefixLength] = X.item;
+				thui(prefix, prefixLength + 1, X, exULs);
+			}
+		}
+	}
+
+	private UList construct(UList P, UList px, UList py)
+	{
+		UList pxyUL = new UList(py.item);
+		double totUtil = px.sumIutils + px.sumRutils;
+		int ei = 0, ej = 0, Pi = -1;
+		while (ei < px.elements.size() && ej < py.elements.size())
+		{
+			UElement ex = px.elements.get(ei), ey = py.elements.get(ej);
+			if (ex.tid > ey.tid)
+			{
+				++ej;
+				continue;
+			}
+			if (ex.tid < ey.tid)
+			{
+				totUtil -= ex.iutils + ex.rutils;
+				if (totUtil < delta)
+					return null;
+				++ei;
+				if (P != null)
+					++Pi;
+				continue;
+			}
+			if (null == P)
+				pxyUL.addElement(new UElement(ex.tid, ex.iutils + ey.iutils, ey.rutils));
+			else
+			{
+				while (Pi < P.elements.size() && P.elements.get(++Pi).tid < ex.tid) ;
+				UElement e = P.elements.get(Pi);
+				pxyUL.addElement(new UElement(ex.tid, ex.iutils + ey.iutils - e.iutils, ey.rutils));
+			}
+			++ei;
+			++ej;
+		}
+		while (ei < px.elements.size())
+		{
+			UElement ex = px.elements.get(ei);
+			totUtil -= ex.iutils + ex.rutils;
+			if (totUtil < delta)
+				return null;
+			++ei;
+		}
+		return pxyUL;
+	}
+	
+	/* Main procedures */
+	private boolean loadDataset()
+	{
+		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(this.inputFilePath), StandardCharsets.UTF_8)))
+		{
+			String line = null;
+			int tid = 0;
+			boolean colonWarningFlag = false, countWarningFlag = false, parsingWarningFlag = false;
+			while ((line = reader.readLine()) != null)
+			{
+				line = line.trim();
+				if (!line.isEmpty() && '1' <= line.charAt(0) && line.charAt(0) <= '9')
+				{
+					Transaction transaction = new Transaction(++tid);
+					final String[] parts = line.split(":");
+					if (this.columnIndex < parts.length)
+					{
+						final String[] itemTokens = parts[0].trim().split("\\s+");
+						final String[] utilityTokens = parts[this.columnIndex].trim().split("\\s+");
+						if (itemTokens.length == utilityTokens.length)
+							try
+							{
+								double transactionUtility = 0;
+								for (int i = 0; i < itemTokens.length; ++i)
+								{
+									int item = Integer.parseInt(itemTokens[i]);
+									double utility = Double.parseDouble(utilityTokens[i]);
+									transactionUtility += utility;
+									transaction.put(item, new ItemInfo(utility));
+								}
+								transaction.ttf = transactionUtility;
+								transactions.add(transaction);
+							}
+							catch (Throwable e)
+							{
+								parsingWarningFlag = true;
+							}
+						else
+							countWarningFlag = true;
+					}
+					else
+						colonWarningFlag = true;
+				}
+			}
+			if (colonWarningFlag)
+				this.logger.print("One or more effective lines contain fewer than " + this.columnIndex + " colon(s), which have been skipped. ", LogLevel.Warning);
+			if (countWarningFlag)
+				this.logger.print("One or more effective lines contain inconsistent counts of items and utilities, which have been skipped. ", LogLevel.Warning);
+			if (parsingWarningFlag)
+				this.logger.print("One or more effective lines contain failures in parsing numbers, which have been skipped. ", LogLevel.Warning);
+			return true;
+			
+		}
+		catch (Throwable e)
+		{
+			this.logger.print("Failed to load the dataset " + Formatter.escapeString(this.inputFilePath) + " due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
+			return false;
+		}
+	}
+
+	private void computeTWTF()
+	{
+		for (Transaction transaction : this.transactions)
+			for (Integer item : transaction.items.keySet())
+				this.TWTF.put(item, TWTF.getOrDefault(item, 0.0) + transaction.ttf);
+	}
+
+	private void sortTWTF()
+	{
+		ArrayList<Map.Entry<Integer, Double>> list = new ArrayList<>(TWTF.entrySet());
+		list.sort(Map.Entry.comparingByValue());
+		TWTF.clear();
+		sequence = new int[list.size()];
+		itemEvents = new ItemEvent[list.size()];
+		int i = 0;
+		for (Map.Entry<Integer, Double> e : list)
+		{
+			TWTF.put(e.getKey(), e.getValue());
+			sequence[i] = e.getKey();
+			itemEvents[i] = new ItemEvent(e.getKey());
+			++i;
+		}
+	}
+
+	private void computeRTF()
+	{
+		for (Transaction t : transactions)
+		{
+			for (int i = 0; i < sequence.length; ++i)
+			{
+				if (t.items.containsKey(sequence[i]))
+				{
+					for (int j = i + 1; j < sequence.length; j++)
+					{
+						if (t.items.containsKey(sequence[j]))
+						{
+							t.items.get(sequence[i]).rtf += t.items.get(sequence[j]).utility;
+						}
+					}
+					itemEvents[i].transactions.put(t.tid, t.items.get(sequence[i]));
+				}
+			}
+		}
+	}
+
+	private void computeETF()
+	{
+		for (Transaction t : transactions)
+		{
+			for (Map.Entry<Integer, ItemInfo> e : t.items.entrySet())
+			{
+				ETF.put(e.getKey(), ETF.getOrDefault(e.getKey(), 0.0) + e.getValue().utility);
+			}
+		}
+	}
+
+	private void sortETF()
+	{
+		ArrayList<Map.Entry<Integer, Double>> list = new ArrayList<>(ETF.entrySet());
+		list.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+		ETF.clear();
+		for (Map.Entry<Integer, Double> e : list) ETF.put(e.getKey(), e.getValue());
+		if (switches[1] && !list.isEmpty())
+		{
+			int idx = Math.min(this.k, list.size()) - 1;
+			double tmp = list.get(idx).getValue();
+			if (tmp > delta)
+				delta = tmp;
+		}
+	}
+
+	private void pruneItem()
+	{
+		LinkedHashMap<Integer, Double> newTWTF = new LinkedHashMap<>();
+		for (Map.Entry<Integer, Double> e : TWTF.entrySet())
+		{
+			if (e.getValue() >= delta)
+				newTWTF.put(e.getKey(), e.getValue());
+			else
+				for (Transaction transaction : transactions)
+					transaction.items.remove(e.getKey());
+		}
+		TWTF = newTWTF;
+	}
+
+	private void sortTTFE()
+	{
+		for (int i = 0; i < transactions.size(); ++i)
+		{
+			final Transaction oldTransaction = transactions.get(i);
+			Transaction newT = new Transaction(oldTransaction.tid);
+			for (Map.Entry<Integer, Double> e : TWTF.entrySet())
+			{
+				if (oldTransaction.items.containsKey(e.getKey()))
+					newT.put(e.getKey(), oldTransaction.items.get(e.getKey()));
+			}
+			transactions.set(i, newT);
+		}
+	}
+
+	private void generateTable()
+	{
+		if (TWTF.isEmpty()) return;
+		int size = TWTF.size();
+		int[] columns = new int[size - 1];
+		int[] index = new int[size - 1];
+		double[][] values = new double[size - 1][size - 1];
+		{
+			int cnt = 0;
+			for (Map.Entry<Integer, Double> e : TWTF.entrySet())
+			{
+				if (cnt == 0) index[cnt] = e.getKey();
+				else if (cnt == size - 1) columns[cnt - 1] = e.getKey();
+				else { index[cnt] = e.getKey(); columns[cnt - 1] = e.getKey(); }
+				cnt++;
+			}
+		}
+		LETF = new Table(values, index, columns, "LETF");
+		for (Transaction t : transactions)
+		{
+			ArrayList<Integer> itemSeq = new ArrayList<>(t.items.keySet());
+			final int lastSequenceIndex = sequence.length - 1;
+			for (int i = 0; i < lastSequenceIndex; ++i)
+			{
+				int p = sequence[i];
+				if (!t.items.containsKey(p)) continue;
+				ArrayList<Integer> subSeq = new ArrayList<>();
+				subSeq.add(p);
+				double sum = t.items.get(p).utility;
+				for (int j = i + 1; j < sequence.length; j++)
+				{
+					int q = sequence[j];
+					if (!t.items.containsKey(q)) break;
+					subSeq.add(q);
+					sum += t.items.get(q).utility;
+					if (t.isSequence(subSeq))
+						LETF.addValueByName(p, q, sum);
+					else
+						break;
+				}
+			}
+		}
+	}
+
+	private void raiseThreshold_LETF_E()
+	{
+		if (LETF != null && LETF.values.length >= 1)
+		{
+			final int n = LETF.values.length;
+			letf_e.offer(LETF.values[n - 1][n - 1]);
+			for (int j = n - 2; j >= 0; --j)
+			{
+				for (int i = j; i >= 0 && letf_e.size() < this.k; --i)
+				{
+					if (LETF.values[i][j + 1] > LETF.values[j][j])
+						letf_e.offer(LETF.values[i][j + 1]);
+					else
+					{
+						letf_e.offer(LETF.values[j][j]);
+						break;
+					}
+				}
+				if (letf_e.size() >= this.k) break;
+			}
+			if (letf_e.size() >= this.k && letf_e.peek() > delta)
+				delta = letf_e.peek();
+		}
+	}
+
+	private void raiseThreshold_LETF_LB()
+	{
+		if (LETF != null && LETF.values.length >= 1)
+		{
+			for (int i = 0; i < LETF.values.length; ++i)
+			{
+				for (int j = 0; j < LETF.values[i].length; ++j)
+				{
+					int p = LETF.index[i], q = LETF.columns[j];
+					ArrayList<Integer> mids = LETF.getMiddleElements(p, q, false);
+					double tmp = LETF.values[i][j];
+					for (int m = 0; m < 3 && m < mids.size(); ++m)
+					{
+						tmp -= ETF.get(mids.get(m));
+						if (tmp > delta)
+						{
+							letf_lb.offer(tmp);
+							while (letf_lb.size() > this.k) letf_lb.poll();
+						}
+						else
+							break;
+					}
+				}
+			}
+			if (letf_lb.size() >= this.k && letf_lb.peek() > delta)
+				delta = letf_lb.peek();
+		}
+	}
+
+	private void mineWithUtilityLists()
+	{
+		LinkedHashMap<Integer, UList> mapItemToUList = new LinkedHashMap<>();
+		for (int item : sequence)
+		{
+			if (TWTF.containsKey(item) && TWTF.get(item) >= delta)
+			{
+				UList ul = new UList(item);
+				mapItemToUList.put(item, ul);
+			}
+		}
+		for (Transaction trans : transactions)
+		{
+			ArrayList<Integer> itemsInTrans = new ArrayList<>();
+			for (int item : sequence)
+			{
+				if (trans.items.containsKey(item))
+				{
+					itemsInTrans.add(item);
+				}
+			}
+			if (itemsInTrans.isEmpty()) continue;
+			double remaining = 0;
+			for (int i = itemsInTrans.size() - 1; i >= 0; --i)
+			{
+				int item = itemsInTrans.get(i);
+				double utility = trans.items.get(item).utility;
+				UList ul = mapItemToUList.get(item);
+				if (ul != null)
+					ul.addElement(new UElement(trans.tid, utility, remaining));
+				remaining += utility;
+			}
+		}
+		ArrayList<UList> listOfULists = new ArrayList<>();
+		for (int item : sequence)
+		{
+			UList ul = mapItemToUList.get(item);
+			if (ul != null && ul.elements.size() > 0)
+				listOfULists.add(ul);
+		}
+		int[] prefix = new int[BUFFERS_SIZE];
+		thui(prefix, 0, null, listOfULists);
+		mapItemToUList.clear();
+	}
+	@Override
+	public Number[] runAlgorithm()
+	{
+		if (!this.loadDataset())
+		{
+			return new Number[] { null, null, this.delta };
+		}
+		if (transactions.isEmpty())
+		{
+			this.logger.print("No transactions loaded, cannot run algorithm. ", LogLevel.Error);
+			return new Number[] { null, null, this.delta };
+		}
+		final long startTime = System.nanoTime();
+		try
+		{
+			this.computeTWTF(); this.checkMemory();
+			this.sortTWTF(); this.checkMemory();
+			this.computeRTF(); this.checkMemory();
+			this.computeETF(); this.checkMemory();
+			this.sortETF(); this.checkMemory();
+			this.pruneItem(); this.checkMemory();
+			this.sortTTFE(); this.checkMemory();
+			this.generateTable(); this.checkMemory();
+			if (switches[2]) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
+			if (switches[3]) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
+			this.mineWithUtilityLists(); this.checkMemory();
+		}
+		catch (Throwable e)
+		{
+			this.logger.print("Failed to execute the THUI algorithm due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
+			return new Number[] { null, null, this.delta };
+		}
+		final long endTime = System.nanoTime();
+		return new Number[] { endTime - startTime, this.peakMemory, this.delta };
+	}
+	public ArrayList<ArrayList<Integer>> getTopKPatterns()
+	{
+		if (this.finalResults == null || this.finalResults.isEmpty())
+			return new ArrayList<ArrayList<Integer>>();
+		else
+		{
+			ArrayList<HTFE> sorted = new ArrayList<>(this.finalResults);
+			sorted.sort((a, b) -> Double.compare(b.eetf, a.eetf));
+			ArrayList<ArrayList<Integer>> keys = new ArrayList<>();
+			for (HTFE htfe : sorted)
+				keys.add(new ArrayList<>(htfe.sequence));
+			return keys;
+		}
+	}
+	public ArrayList<Double> getTopKValues()
+	{
+		if (finalResults == null || finalResults.isEmpty())
+			return new ArrayList<Double>();
+		else
+		{
+			ArrayList<HTFE> sorted = new ArrayList<>(finalResults);
+			sorted.sort((a, b) -> Double.compare(b.eetf, a.eetf));
+			ArrayList<Double> values = new ArrayList<>();
+			for (HTFE htfe : sorted)
+				values.add(htfe.eetf);
+			return values;
+		}
+	}
+}
+
 class AlgorithmTHUFI extends Algorithm
 {
+	private class PatternTHUFI implements Comparable<PatternTHUFI>
+	{
+		ArrayList<Integer> items = null;
+		double combinedUtility = 0;
+		
+		PatternTHUFI(ArrayList<Integer> items, double combinedUtility)
+		{
+			this.items = items;
+			this.combinedUtility = combinedUtility;
+		}
+		@Override
+		public int compareTo(PatternTHUFI o)
+		{
+			return Double.compare(this.combinedUtility, o.combinedUtility);
+		}
+	}
+	
+	private PriorityQueue<PatternTHUFI> finalResults = new PriorityQueue<>();
+	
 	public AlgorithmTHUFI(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
 		super(inputFilePath, alpha, beta, delta, k, logger);
@@ -760,18 +1433,90 @@ class AlgorithmTHUFI extends Algorithm
 	public Number[] runAlgorithm()
 	{
 		final long startTime = System.nanoTime();
-		this.delta = 73.5;
-		final long endTime = System.nanoTime();
-		return new Number[] { endTime - startTime, this.peakMemory, this.delta };
-	}
-}
 
-class AlgorithmGUMM extends AlgorithmTTFE
-{
-	public AlgorithmGUMM(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
+		/* Utility */
+		AlgorithmTHUI utilityAlgorithm = new AlgorithmTHUI(this.inputFilePath, this.alpha, this.beta, this.delta, this.k, this.logger);
+		utilityAlgorithm.setColumnIndex(1);
+		final Number[] utilityMetrics = utilityAlgorithm.runAlgorithm();
+		final ArrayList<ArrayList<Integer>> utilityTopKPatterns = utilityAlgorithm.getTopKPatterns();
+		final ArrayList<Double> utilityTopKValues = utilityAlgorithm.getTopKValues();
+
+		/* Frequency */
+		AlgorithmTHUI frequencyAlgorithm = new AlgorithmTHUI(this.inputFilePath, this.alpha, this.beta, this.delta, this.k, this.logger);
+		frequencyAlgorithm.setColumnIndex(2);
+		final Number[] frequencyMetrics = frequencyAlgorithm.runAlgorithm();
+		final ArrayList<ArrayList<Integer>> frequencyTopKPatterns = frequencyAlgorithm.getTopKPatterns();
+		final ArrayList<Double> frequencyTopKValues = frequencyAlgorithm.getTopKValues();
+
+		/* Merge */
+		final LinkedHashMap<ArrayList<Integer>, double[]> combinedMap = new LinkedHashMap<>();
+		for (int i = 0; i < utilityTopKPatterns.size(); ++i)
+		{
+			ArrayList<Integer> items = utilityTopKPatterns.get(i);
+			double utility = utilityTopKValues.get(i);
+			double[] vals = combinedMap.get(items);
+			if (vals == null)
+				combinedMap.put(items, new double[] { utility, 0.0 });
+			else
+				vals[0] = utility;
+		}
+		for (int i = 0; i < frequencyTopKPatterns.size(); ++i)
+		{
+			ArrayList<Integer> items = frequencyTopKPatterns.get(i);
+			double frequency = frequencyTopKValues.get(i);
+			double[] vals = combinedMap.get(items);
+			if (vals == null)
+				combinedMap.put(items, new double[] { 0.0, frequency });
+			else
+				vals[1] = frequency;
+		}
+
+		for (Map.Entry<ArrayList<Integer>, double[]> entry : combinedMap.entrySet())
+		{
+			double u = entry.getValue()[0];
+			double f = entry.getValue()[1];
+			double combined = this.alpha * u + this.beta * f;
+			finalResults.offer(new PatternTHUFI(entry.getKey(), combined));
+			while (finalResults.size() > this.k)
+				finalResults.poll();
+		}
+
+		final long endTime = System.nanoTime();
+		
+		/* Metrics */
+		Long peakMemory = null;
+		if (utilityMetrics[1] != null && frequencyMetrics[1] != null)
+			peakMemory = Math.max((Long)utilityMetrics[1], (Long)frequencyMetrics[1]);
+		else if (utilityMetrics[1] != null)
+			peakMemory = (Long)utilityMetrics[1];
+		else if (frequencyMetrics[1] != null)
+			peakMemory = (Long)frequencyMetrics[1];
+		if ((double)utilityMetrics[2] != Double.NEGATIVE_INFINITY && (double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
+			this.delta = this.alpha * (double)utilityMetrics[2] + this.beta * (double)frequencyMetrics[2];
+		else if ((double)utilityMetrics[2] != Double.NEGATIVE_INFINITY)
+			this.delta = (double)utilityMetrics[2];
+		else if ((double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
+			this.delta = (double)frequencyMetrics[2];
+		return new Number[] { endTime - startTime, peakMemory, this.delta };
+	}
+	public ArrayList<ArrayList<Integer>> getTopKPatterns()
 	{
-		super(inputFilePath, alpha, beta, delta, k, logger);
-		this.switches = new boolean[] { false, false, false, false, false, false };
+		ArrayList<PatternTHUFI> sorted = new ArrayList<>(finalResults);
+		sorted.sort((a, b) -> Double.compare(b.combinedUtility, a.combinedUtility));
+		ArrayList<ArrayList<Integer>> keys = new ArrayList<>();
+		for (PatternTHUFI p : sorted)
+			keys.add(new ArrayList<>(p.items));
+		return keys;
+	}
+
+	public ArrayList<Double> getTopKValues()
+	{
+		ArrayList<PatternTHUFI> sorted = new ArrayList<>(finalResults);
+		sorted.sort((a, b) -> Double.compare(b.combinedUtility, a.combinedUtility));
+		ArrayList<Double> values = new ArrayList<>();
+		for (PatternTHUFI p : sorted)
+			values.add(p.combinedUtility);
+		return values;
 	}
 }
 
@@ -861,14 +1606,14 @@ class AlgorithmTTFE extends Algorithm
 			this.values = values; this.index = index; this.columns = columns; this.name = name;
 			this.sequence = new int[index.length + 1];
 			this.sequence[0] = index[0];
-			for (int i = 0; i < columns.length; i++) this.sequence[i+1] = columns[i];
+			for (int i = 0; i < columns.length; ++i) this.sequence[i+1] = columns[i];
 		}
 
 		boolean addValueByName(int indexName, int columnName, double value)
 		{
 			int ci = -1, ii = -1;
-			for (int i = 0; i < columns.length; i++) if (columns[i] == columnName) { ci = i; break; }
-			for (int i = 0; i < index.length; i++) if (index[i] == indexName) { ii = i; break; }
+			for (int i = 0; i < columns.length; ++i) if (columns[i] == columnName) { ci = i; break; }
+			for (int i = 0; i < index.length; ++i) if (index[i] == indexName) { ii = i; break; }
 			if (ci == -1 || ii == -1) return false;
 			values[ii][ci] += value;
 			return true;
@@ -1126,7 +1871,7 @@ class AlgorithmTTFE extends Algorithm
 	{
 		for (Transaction t : transactions)
 		{
-			for (int i = 0; i < sequence.length; i++)
+			for (int i = 0; i < sequence.length; ++i)
 			{
 				if (t.events.containsKey(sequence[i]))
 				{
@@ -1214,7 +1959,7 @@ class AlgorithmTTFE extends Algorithm
 		for (Transaction t : transactions)
 		{
 			ArrayList<Integer> itemSeq = new ArrayList<>(t.events.keySet());
-			for (int i = 0; i < sequence.length - 1; i++)
+			for (int i = 0; i < sequence.length - 1; ++i)
 			{
 				int p = sequence[i];
 				if (!t.events.containsKey(p)) continue;
@@ -1336,23 +2081,23 @@ class AlgorithmTTFE extends Algorithm
 	{
 		if (!this.loadDataset())
 		{
-			return new Number[] { null, null, null };
+			return new Number[] { null, null, this.delta };
 		}
 		if (transactions.isEmpty())
 		{
 			this.logger.print("No transactions loaded, cannot run algorithm. ", LogLevel.Error);
-			return new Number[] { null, null, null };
+			return new Number[] { null, null, this.delta };
 		}
 		final long startTime = System.nanoTime();
 		try
 		{
-			this.computeTWTF();   this.checkMemory();
-			this.sortTWTF();      this.checkMemory();
-			this.computeRTF();    this.checkMemory();
-			this.computeETF();    this.checkMemory();
-			this.sortETF();       this.checkMemory();
-			this.pruneItem();     this.checkMemory();
-			this.sortTTFE();      this.checkMemory();
+			this.computeTWTF(); this.checkMemory();
+			this.sortTWTF(); this.checkMemory();
+			this.computeRTF(); this.checkMemory();
+			this.computeETF(); this.checkMemory();
+			this.sortETF(); this.checkMemory();
+			this.pruneItem(); this.checkMemory();
+			this.sortTTFE(); this.checkMemory();
 			this.generateTable(); this.checkMemory();
 			if (switches[2]) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
 			if (switches[3]) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
@@ -1361,10 +2106,19 @@ class AlgorithmTTFE extends Algorithm
 		catch (Exception e)
 		{
 			this.logger.print("Algorithm execution failed: " + e.getMessage(), LogLevel.Error);
-			return new Number[] { null, null, null };
+			return new Number[] { null, null, this.delta };
 		}
 		final long endTime = System.nanoTime();
 		return new Number[] { endTime - startTime, this.peakMemory, this.delta };
+	}
+}
+
+class AlgorithmGUMM extends AlgorithmTTFE
+{
+	public AlgorithmGUMM(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	{
+		super(inputFilePath, alpha, beta, delta, k, logger);
+		this.switches = new boolean[] { false, false, false, false, false, false };
 	}
 }
 
@@ -1383,7 +2137,7 @@ class Saver
 		this.columns = columns;
 		this.logger = (logger != null) ? logger : new Logger();
 		if (null == this.outputFilePath || this.outputFilePath.length() < 1)
-			this.logger.print("Saver: The results will display on the console. ", LogLevel.Debug);
+			this.logger.print("Saver: The results will be displayed on the console. ", LogLevel.Debug);
 		else
 		{
 			this.escapedOutputFilePath = Formatter.escapeString(this.outputFilePath);
@@ -1689,11 +2443,12 @@ public class TopKMining
 				algorithms.put("GUMM", parameters -> new AlgorithmGUMM(dataset, (double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
 				algorithms.put("TTFE", parameters -> new AlgorithmTTFE(dataset, (double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
 				final double[] alphaValues = { 0, 0.25, 0.5, 0.75, 1 };
+				final double[] defaultAlphaValue = { Algorithm.getDefaultAlpha() };
 				final double[] deltaValues = { Double.NEGATIVE_INFINITY };
 				final int[] kValues = { 5, 10, 50, 100, 500, 1000, 5000, 10000 };
 				
 				/* Algorithms */
-				Number[] parameters = new Number[] { null, null, null, null };
+				Number[] parameters = new Number[] { null, null, null, Double.NEGATIVE_INFINITY };
 				String[] columns = { "Dataset", "Algorithm", "$\\alpha$", "$\\beta$", "$\\delta_0$", "$k$", "Run count", "Time consumption (ns)", "Memory consumption (B)", "$\\delta^*$" };
 				final int length = columns.length, metricLength = 3;
 				Object[][] results = new Object[algorithms.size() * alphaValues.length * deltaValues.length * kValues.length][length];
@@ -1704,7 +2459,7 @@ public class TopKMining
 				{
 					final String algorithmName = entry.getKey();
 					final Function<Number[], Algorithm> algorithmFactory = entry.getValue();
-					for (final double alpha : alphaValues)
+					for (final double alpha : ("TTFE" == algorithmName ? alphaValues : defaultAlphaValue))
 					{
 						parameters[0] = alpha;
 						final double beta = 1 - alpha;
@@ -1720,6 +2475,9 @@ public class TopKMining
 								results[outerIndex][innerIndex++] = delta; results[outerIndex][innerIndex++] = k;
 								results[outerIndex][innerIndex++] = runCount;
 								parameters[3] = k;
+								logger.print(Formatter.array2String(
+									parameters, "``algorithmName = \"" + algorithmName + "\"`` | ``Parameters = (", ", ", ")``"
+								), LogLevel.Debug);
 								System.gc();
 								Algorithm algorithm = algorithmFactory.apply(parameters);
 								Number[] result = algorithm.runAlgorithm();
@@ -1773,7 +2531,7 @@ public class TopKMining
 						}
 					}
 				}
-				System.exit(saver.save(results, 0, outerIndex) && flag ? EXIT_SUCCESS : EXIT_FAILURE);
+				System.exit(flag ? EXIT_SUCCESS : EXIT_FAILURE);
 			}
 			else
 			{

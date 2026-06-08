@@ -78,17 +78,17 @@ class Extender:
 def main():
 	# Parameters #
 	datasetNames = ("accidents", "chess", "kosarak", "mushroom")
-	positiveFilePathFormatter = "./{0}_positive.txt"
 	negativeFilePathFormatter = "./{0}_negative.txt"
+	positiveFilePathFormatter = "./{0}_positive.txt"
 	outputFilePathFormatter = "./{0}.txt"
 	prefix = "# Event : Threat : Frequency : TTF" + linesep
 	
 	# Extension #
 	flag = True
 	for datasetName in datasetNames:
-		extender = Extender((positiveFilePathFormatter.format(datasetName), negativeFilePathFormatter.format(datasetName)))
+		extender = Extender((negativeFilePathFormatter.format(datasetName), positiveFilePathFormatter.format(datasetName)))
 		outputFilePath = outputFilePathFormatter.format(datasetName)
-		result = extender.extend(outputFilePath)
+		result = extender.extend(outputFilePath, prefix = prefix)
 		if isinstance(result, int):
 			print("{0} -> {1}".format(repr(outputFilePath), result))
 		else:
