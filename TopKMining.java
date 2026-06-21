@@ -1,9 +1,12 @@
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
+import java.io.ObjectOutputStream;
 import java.io.OutputStreamWriter;
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
@@ -169,7 +172,7 @@ class Formatter
 		final String mainFileName = dotIndex >= 1 ? fileName.substring(0, dotIndex) : fileName;
 		return mainFileName.replaceAll("[^\\-0-9A-Za-z]", "");
 	}
-	public static String filterPrintableAsciiCharacters(final Object object)
+	public static String filterString(final Object object)
 	{
 		StringBuilder sb = new StringBuilder();
 		for (final char character : String.valueOf(object).toCharArray())
@@ -213,10 +216,12 @@ class Formatter
 class Parser
 {
 	private static final LogLevel DefaultLogLevel = LogLevel.Info;
+	private static final int DefaultMaximumTransactionCount = Integer.MAX_VALUE;
 	private static final int DefaultRunCount = 10;
 	private static final String[] HelpArguments = { "?", "/?", "-?", "h", "/h", "-h", "help", "/help", "--help" };
 	private static final String[] DatasetArguments = { "d", "/d", "-d", "dataset", "/dataset", "--dataset" };
 	private static final String[] LogLevelArguments = { "l", "/l", "-l", "logLevel", "/logLevel", "--logLevel" };
+	private static final String[] MaximumTransactionCountArguments = { "m", "/m", "-m", "maximumTransactionCount", "/maximumTransactionCount", "--maximumTransactionCount" };
 	private static final String[] OutputFilePathArguments = { "o", "/o", "-o", "output", "/output", "--output" };
 	private static final String[] RunCountArguments = { "r", "/r", "-r", "runCount", "/runCount", "--runCount" };
 	
@@ -226,6 +231,7 @@ class Parser
 	private boolean exitFlag = false;
 	private String dataset = null;
 	private LogLevel logLevel = LogLevel.Info;
+	private int maximumTransactionCount = DefaultMaximumTransactionCount;
 	private String outputFilePath = null;
 	private int runCount = DefaultRunCount;
 	
@@ -235,12 +241,19 @@ class Parser
 	}
 	private static boolean containing(final String[] array, final String target)
 	{
-		if (null == array || 0 == array.length || null == target)
+		if (null == array || 0 == array.length)
 			return false;
-		else
+		else if (null == target)
 		{
 			for (final String element : array)
-				if (element != null && element.equalsIgnoreCase(target))
+				if (null == element)
+					return true;
+			return false;
+		}
+		else // target != null
+		{
+			for (final String element : array)
+				if (target.equalsIgnoreCase(element))
 					return true;
 			return false;
 		}
@@ -256,6 +269,7 @@ class Parser
 			"\t" + Formatter.array2String(LogLevelArguments) + " <level>\t\tSpecify the log level from "
 			+ LogLevel.All + " to " + LogLevel.Off + ". The default value is " + DefaultLogLevel + ". "
 		);
+		System.out.println("\t" + Formatter.array2String(MaximumTransactionCountArguments) + " <maximumTransactionCount>\t\tSpecify the maximum transaction count. ");
 		System.out.println("\t" + Formatter.array2String(OutputFilePathArguments) + " <output>\t\tSpecify the output. ");
 		System.out.println("\t" + Formatter.array2String(RunCountArguments) + " <runCount>\t\tSpecify the runCount count to repeat. The default value is " + DefaultRunCount + ". ");
 		System.out.println();
@@ -350,116 +364,74 @@ class Parser
 					return false;
 			}
 	}
-	private boolean parseRunCount(final String string)
+	private Number parseRealNumber(final String string)
 	{
-		if (null == string || string.isEmpty())
-			return false;
-		else
+		if (string instanceof String)
 		{
-			int frontIndex = 0, radix = 0, endIndex = string.length() - 1, value = 0;
-			boolean isNegative = false;
-			for (boolean breakFlag = false; frontIndex < string.length(); ++frontIndex)
-			{
-				switch (string.charAt(frontIndex))
+			final String realNumberString = string.replaceAll("[^+\\-.0-9A-Za-z]", "").toLowerCase();
+			if (!realNumberString.contains("x") && realNumberString.contains("e") && !realNumberString.endsWith("e"))
+				try
 				{
-				case '\t':
-				case ' ':
-				case '+':
-				case '_':
-					continue;
-				case '-':
-					isNegative = !isNegative;
-					break;
-				default:
-					breakFlag = true;
-					break;
+					return Double.parseDouble(realNumberString);
 				}
-				if (breakFlag)
-					break;
-			}
-			for (boolean breakFlag = false; frontIndex < string.length(); ++frontIndex) // make ``frontIndex`` point to the first effective digit
-			{
-				switch (string.charAt(frontIndex))
+				catch (Throwable e)
 				{
-				case '\t':
-				case ' ':
-				case '0':
-				case '_':
-					continue;
-				case 'X':
-				case 'x':
-					radix = 16;
-					++frontIndex;
-					breakFlag = true;
-					break;
-				case 'D':
-				case 'd':
-					radix = 10;
-					++frontIndex;
-					breakFlag = true;
-					break;
-				case 'O':
-				case 'o':
-					radix = 8;
-					++frontIndex;
-					breakFlag = true;
-					break;
-				case 'Q':
-				case 'q':
-					radix = 4;
-					++frontIndex;
-					breakFlag = true;
-					break;
-				case 'B':
-				case 'b':
-					radix = 2;
-					++frontIndex;
-					breakFlag = true;
-					break;
-				default:
-					breakFlag = true;
-					break;
+					final String warning = "Parsed " + Formatter.escapeString(realNumberString) + " as null due to " + Formatter.escapeString(e) + ". ";
+					this.warnings = this.warnings instanceof String ? this.warnings + warning : "Parser: " + warning;
+					return null;
 				}
-				if (breakFlag)
-					break;
-			}
-			if (0 == radix) // prefix is prior to suffix
-				for (boolean breakFlag = false; endIndex > frontIndex; --endIndex) // make ``endIndex`` point to the first effective digit
+			else
+			{
+				int frontIndex = 0, radix = 0, endIndex = realNumberString.length() - 1, integerValue = 0;
+				boolean isNegative = false, isSpecial = false;
+				for (boolean breakFlag = false; frontIndex < realNumberString.length(); ++frontIndex)
 				{
-					switch (string.charAt(endIndex))
+					switch (realNumberString.charAt(frontIndex))
 					{
 					case '\t':
 					case ' ':
+					case '+':
 					case '_':
 						continue;
-					case 'X':
+					case '-':
+						isNegative = !isNegative;
+						break;
+					default:
+						breakFlag = true;
+						break;
+					}
+					if (breakFlag)
+						break;
+				}
+				for (boolean breakFlag = false; frontIndex < realNumberString.length(); ++frontIndex) // make ``frontIndex`` point to the first effective digit
+				{
+					switch (realNumberString.charAt(frontIndex))
+					{
+					case '0':
+						continue;
 					case 'x':
 						radix = 16;
-						--endIndex;
+						++frontIndex;
 						breakFlag = true;
 						break;
-					case 'D':
 					case 'd':
 						radix = 10;
-						--endIndex;
+						++frontIndex;
 						breakFlag = true;
 						break;
-					case 'O':
 					case 'o':
 						radix = 8;
-						--endIndex;
+						++frontIndex;
 						breakFlag = true;
 						break;
-					case 'Q':
 					case 'q':
 						radix = 4;
-						--endIndex;
+						++frontIndex;
 						breakFlag = true;
 						break;
-					case 'B':
 					case 'b':
 						radix = 2;
-						--endIndex;
+						++frontIndex;
 						breakFlag = true;
 						break;
 					default:
@@ -469,44 +441,150 @@ class Parser
 					if (breakFlag)
 						break;
 				}
-			if (0 == radix)
-				radix = 10;
-			boolean isOverflowed = false, isIllegalDigitDetected = false;
-			for (int index = frontIndex; index <= endIndex; ++index)
-			{
-				final int digit = Character.digit(string.charAt(index), radix);
-				if (0 <= digit && digit < radix)
-				{
-					long testValue = (long)value * radix + digit; // test whether it is overflowed
-					if (testValue > Integer.MAX_VALUE)
+				if (0 == radix) // prefix is prior to suffix
+					for (boolean breakFlag = false; endIndex > frontIndex; --endIndex) // make ``endIndex`` point to the first effective digit
 					{
-						value = Integer.MAX_VALUE;
-						isOverflowed = true;
+						switch (realNumberString.charAt(endIndex))
+						{
+						case 'x':
+							radix = 16;
+							--endIndex;
+							breakFlag = true;
+							break;
+						case 'd':
+							radix = 10;
+							--endIndex;
+							breakFlag = true;
+							break;
+						case 'o':
+							radix = 8;
+							--endIndex;
+							breakFlag = true;
+							break;
+						case 'q':
+							radix = 4;
+							--endIndex;
+							breakFlag = true;
+							break;
+						case 'b':
+							radix = 2;
+							--endIndex;
+							breakFlag = true;
+							break;
+						default:
+							breakFlag = true;
+							break;
+						}
+						if (breakFlag)
+							break;
+					}
+				Number number = null;
+				if (endIndex - frontIndex == 2)
+				{
+					final String subString = realNumberString.substring(frontIndex, endIndex + 1);
+					switch (subString)
+					{
+					case "inf":
+						number = isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+						isSpecial = true;
+						break;
+					case "nan":
+						isSpecial = true;
+						break;
+					default:
 						break;
 					}
-					else
-						value = (int)testValue;
+				}
+				if (isSpecial)
+				{
+					final String trace = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + ". ";
+					this.traces = this.traces instanceof String ? this.traces + trace : "Parser: " + trace;
 				}
 				else
-					isIllegalDigitDetected = true;
+				{
+					if (0 == radix)
+						radix = 10;
+					boolean containingMultipleRadixPoints = false, isDecimal = false, isIllegalDigitDetected = false, isOverflowed = false;
+					double decimalValue = 0;
+					for (int index = frontIndex; index <= endIndex; ++index)
+						if ('.' == realNumberString.charAt(index))
+						{
+							frontIndex = ++index;
+							for (; index <= endIndex; ++index) // locate the second radix point
+								if ('.' == realNumberString.charAt(index))
+								{
+									containingMultipleRadixPoints = true;
+									endIndex = index - 1;
+									break;
+								}
+							while (endIndex > frontIndex)
+								if ('0' == realNumberString.charAt(endIndex))
+									--endIndex;
+								else
+									break;
+							for (index = endIndex; index >= frontIndex; --index)
+							{
+								final int digit = Character.digit(realNumberString.charAt(index), radix);
+								if (0 <= digit && digit < radix)
+								{
+									decimalValue += digit;
+									decimalValue /= radix;
+									isDecimal = true;
+								}
+								else
+									isIllegalDigitDetected = true;
+							}
+							break;
+						}
+						else
+						{
+							final int digit = Character.digit(realNumberString.charAt(index), radix);
+							if (0 <= digit && digit < radix)
+							{
+								final long testValue = (long)integerValue * radix + digit; // test whether it is overflowed
+								if (testValue > Integer.MAX_VALUE)
+								{
+									integerValue = Integer.MAX_VALUE; // this line can be commented out
+									isOverflowed = true;
+									break;
+								}
+								else
+									integerValue = (int)testValue;
+							}
+							else
+								isIllegalDigitDetected = true;
+						}
+					if (isDecimal)
+						if (isOverflowed)
+							number = isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+						else
+							number = isNegative ? -(decimalValue + integerValue) : decimalValue + integerValue;
+					else
+						number = isOverflowed ? (isNegative ? Integer.MIN_VALUE : Integer.MAX_VALUE) : (isNegative ? -integerValue : integerValue);
+					ArrayList<String> issues = new ArrayList<String>();
+					if (containingMultipleRadixPoints)
+						issues.add("strings after the second radix point ignored");
+					if (isIllegalDigitDetected)
+						issues.add("at least an illegal digit detected");
+					if (isOverflowed)
+						issues.add("an overflow signal captured");
+					if (issues.isEmpty())
+					{
+						System.out.println("number class: " + number.getClass() + " value: " + number);
+						final String trace = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + ". ";
+						this.traces = this.traces instanceof String ? this.traces + trace : "Parser: " + trace;
+					}
+					else
+					{
+						final String warning = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + " with " + Formatter.arrayList2String(issues) + ". ";
+						this.warnings = this.warnings instanceof String ? this.warnings + warning : "Parser: " + warning;
+					}
+				}
+				return number;
 			}
-			this.runCount = value;
-			ArrayList<String> issues = new ArrayList<String>();
-			if (isNegative)
-				issues.add("the negative sign removed");
-			if (isOverflowed)
-				issues.add("an overflow signal captured");
-			if (isIllegalDigitDetected)
-				issues.add("at least an illegal digit detected");
-			if (!issues.isEmpty())
-				this.warnings = (
-					"Parser: Parsed the ``runCount = " + Formatter.escapeString(string) + "`` as ``runCount = "
-					+ this.runCount + "`` with " + Formatter.arrayList2String(issues) + ". "
-				);
-			else
-				this.traces = "Parser: Parsed the ``runCount = " + Formatter.escapeString(string) + "`` as ``runCount = " + this.runCount + "``. ";
-			return true;
 		}
+		else
+			return null;
 	}
 	public boolean parseArguments(final String[] arguments, final boolean resetBeforeParsing)
 	{
@@ -518,6 +596,7 @@ class Parser
 		{
 			this.dataset = null;
 			this.logLevel = DefaultLogLevel;
+			this.maximumTransactionCount = DefaultMaximumTransactionCount;
 			this.outputFilePath = null;
 			this.runCount = DefaultRunCount;
 		}
@@ -538,6 +617,25 @@ class Parser
 					this.dataset = arguments[i];
 				else
 					missingArgument = true;
+			else if (containing(LogLevelArguments, arguments[i]))
+				if (++i < arguments.length)
+				{
+					if (!this.parseLogLevel(arguments[i]))
+						invalidArgumentIndexes.add(i);
+				}
+				else
+					missingArgument = true;
+			else if (containing(MaximumTransactionCountArguments, arguments[i]))
+				if (++i < arguments.length)
+				{
+					final Number number = this.parseRealNumber(arguments[i]);
+					if (number instanceof Integer && (int)number >= 1)
+						this.maximumTransactionCount = (int)number;
+					else
+						invalidArgumentIndexes.add(i);
+				}
+				else
+					missingArgument = true;
 			else if (containing(OutputFilePathArguments, arguments[i]))
 				if (++i < arguments.length)
 					this.outputFilePath = arguments[i];
@@ -546,15 +644,10 @@ class Parser
 			else if (containing(RunCountArguments, arguments[i]))
 				if (++i < arguments.length)
 				{
-					if (!this.parseRunCount(arguments[i]))
-						invalidArgumentIndexes.add(i);
-				}
-				else
-					missingArgument = true;
-			else if (containing(LogLevelArguments, arguments[i]))
-				if (++i < arguments.length)
-				{
-					if (!this.parseLogLevel(arguments[i]))
+					final Number number = this.parseRealNumber(arguments[i]);
+					if (number instanceof Integer && (int)number >= 1)
+						this.runCount = (int)number;
+					else
 						invalidArgumentIndexes.add(i);
 				}
 				else
@@ -575,8 +668,8 @@ class Parser
 		if (sb.length() >= 1)
 			this.warnings = null == this.warnings || this.warnings.isEmpty() ? "Parser: " + sb.toString() : this.warnings + sb.toString();
 		sb.setLength(0);
-		sb.append("Parsed the dataset as ").append(Formatter.escapeString(this.dataset)).append(". Parsed the output file path as ")
-			.append(Formatter.escapeString(this.outputFilePath)).append(". Parsed the run count as ").append(this.runCount).append(". ");
+		sb.append("Parsed the dataset as ").append(Formatter.escapeString(this.dataset)).append(". Parsed the maximum transaction count as ").append(this.maximumTransactionCount)
+			.append(". Parsed the output file path as ").append(Formatter.escapeString(this.outputFilePath)).append(". Parsed the run count as ").append(this.runCount).append(". ");
 		if (sb.length() >= 1)
 			this.logs = null == this.logs || this.logs.isEmpty() ? "Parser: " + sb.toString() : this.logs + sb.toString();
 		return this.dataset != null && !this.dataset.isEmpty() && this.runCount >= 1;
@@ -609,6 +702,10 @@ class Parser
 	public String getDataset()
 	{
 		return this.dataset;
+	}
+	public int getMaximumTransactionCount()
+	{
+		return this.maximumTransactionCount;
 	}
 	public int getRunCount()
 	{
@@ -699,20 +796,18 @@ class Logger
 	}
 }
 
-abstract class Algorithm
+abstract class Algorithm implements Serializable
 {
 	private static final double DefaultAlpha = 0.5, DefaultBeta = 0.5, DefaultDelta = Double.NEGATIVE_INFINITY;
 	private static final int DefaultK = 10;
 	
-	protected String inputFilePath = null;
 	protected double alpha = DefaultAlpha, beta = DefaultBeta, delta = DefaultDelta;
 	protected int k = DefaultK;
-	protected Logger logger = null;
+	protected transient Logger logger = null;
 	protected long peakMemory = 0L;
 	
-	public Algorithm(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	public Algorithm(final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
-		this.inputFilePath = inputFilePath;
 		this.alpha = alpha;
 		this.beta = beta;
 		this.delta = delta;
@@ -736,27 +831,35 @@ abstract class Algorithm
 		}
 		checkMemory();
 	}
-	public static double getDefaultAlpha()
-	{
-		return DefaultAlpha;
-	}
 	protected final boolean checkMemory()
 	{
-		final long currentMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-		if (currentMemory > this.peakMemory)
+		try
 		{
-			this.peakMemory = currentMemory;
-			return true;
+			final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			final ObjectOutputStream oos = new ObjectOutputStream(baos);
+			oos.writeObject(this);
+			oos.close();
+			final long size = baos.size();
+			if (size > this.peakMemory)
+			{
+				this.peakMemory = size;
+				return true;
+			}
+			else
+				return false;
 		}
-		else
+		catch (Throwable e)
+		{
+			this.logger.print("Algorithm: Failed to check memory due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
 			return false;
+		}
 	}
-	public abstract Number[] runAlgorithm();
+	public abstract Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount);
 }
 
 class AlgorithmTHUI extends Algorithm
 {
-	private class ItemInfo
+	private static class ItemInfo implements Serializable
 	{
 		double utility, rtf;
 		
@@ -766,14 +869,21 @@ class AlgorithmTHUI extends Algorithm
 			this.rtf = 0.0;
 		}
 	}
-
-	private class Transaction
+	private static class Transaction implements Serializable
 	{
 		int tid = 0;
 		LinkedHashMap<Integer, ItemInfo> items = new LinkedHashMap<>();
 		Double ttf = null;
 		
+		public Transaction()
+		{
+			
+		}
 		public Transaction(int tid)
+		{
+			this.setTid(tid);
+		}
+		public void setTid(int tid)
 		{
 			this.tid = tid;
 		}
@@ -822,16 +932,14 @@ class AlgorithmTHUI extends Algorithm
 			return -1;
 		}
 	}
-
-	private class ItemEvent
+	private static class ItemEvent implements Serializable
 	{
 		int item;
 		LinkedHashMap<Integer, ItemInfo> transactions = new LinkedHashMap<>();
 
 		ItemEvent(int item) { this.item = item; }
 	}
-
-	private class Table
+	private static class Table implements Serializable
 	{
 		String name;
 		int[] index, columns, sequence;
@@ -844,7 +952,6 @@ class AlgorithmTHUI extends Algorithm
 			this.sequence[0] = index[0];
 			for (int i = 0; i < columns.length; ++i) this.sequence[i+1] = columns[i];
 		}
-
 		boolean addValueByName(int indexName, int columnName, double value)
 		{
 			int ci = -1, ii = -1;
@@ -854,7 +961,6 @@ class AlgorithmTHUI extends Algorithm
 			values[ii][ci] += value;
 			return true;
 		}
-
 		ArrayList<Integer> getMiddleElements(int p, int q, boolean inclusive)
 		{
 			ArrayList<Integer> arr = new ArrayList<>();
@@ -869,8 +975,7 @@ class AlgorithmTHUI extends Algorithm
 			return arr;
 		}
 	}
-
-	private class UElement
+	private static class UElement implements Serializable
 	{
 		final int tid;
 		double iutils;
@@ -881,8 +986,7 @@ class AlgorithmTHUI extends Algorithm
 			this.tid = tid; this.iutils = iutils; this.rutils = rutils;
 		}
 	}
-
-	private class UList
+	private static class UList implements Serializable
 	{
 		Integer item;
 		double sumIutils = 0;
@@ -899,7 +1003,7 @@ class AlgorithmTHUI extends Algorithm
 		}
 	}
 
-	private class HTFE implements Comparable<HTFE>
+	private static class HTFE implements Comparable<HTFE>, Serializable
 	{
 		ArrayList<Integer> sequence;
 		double eetf;
@@ -930,9 +1034,9 @@ class AlgorithmTHUI extends Algorithm
 	private int candidateCount = 0;
 	private final int BUFFERS_SIZE = 200;
 	
-	public AlgorithmTHUI(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	public AlgorithmTHUI(final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
-		super(inputFilePath, alpha, beta, delta, k, logger);
+		super(alpha, beta, delta, k, logger);
 	}
 	public boolean setColumnIndex(final int index)
 	{
@@ -960,10 +1064,9 @@ class AlgorithmTHUI extends Algorithm
 		}
 		if (finalResults.size() >= this.k)
 		{
-			delta = finalResults.peek().eetf;
+			this.delta = this.finalResults.peek().eetf;
 		}
 	}
-
 	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
 	{
 		for (int i = ULs.size() - 1; i >= 0; --i)
@@ -1038,9 +1141,9 @@ class AlgorithmTHUI extends Algorithm
 	}
 	
 	/* Main procedures */
-	private boolean loadDataset()
+	private boolean loadDataset(final String inputFilePath, final int maximumTransactionCount)
 	{
-		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(this.inputFilePath), StandardCharsets.UTF_8)))
+		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(inputFilePath), StandardCharsets.UTF_8)))
 		{
 			String line = null;
 			int tid = 0;
@@ -1050,7 +1153,7 @@ class AlgorithmTHUI extends Algorithm
 				line = line.trim();
 				if (!line.isEmpty() && '1' <= line.charAt(0) && line.charAt(0) <= '9')
 				{
-					Transaction transaction = new Transaction(++tid);
+					Transaction transaction = new Transaction();
 					final String[] parts = line.split(":");
 					if (this.columnIndex < parts.length)
 					{
@@ -1068,7 +1171,10 @@ class AlgorithmTHUI extends Algorithm
 									transaction.put(item, new ItemInfo(utility));
 								}
 								transaction.ttf = transactionUtility;
+								transaction.tid = ++tid;
 								transactions.add(transaction);
+								if (tid >= maximumTransactionCount)
+									break;
 							}
 							catch (Throwable e)
 							{
@@ -1092,7 +1198,7 @@ class AlgorithmTHUI extends Algorithm
 		}
 		catch (Throwable e)
 		{
-			this.logger.print("Failed to load the dataset " + Formatter.escapeString(this.inputFilePath) + " due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
+			this.logger.print("Failed to load the dataset " + Formatter.escapeString(inputFilePath) + " due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
 			return false;
 		}
 	}
@@ -1158,8 +1264,9 @@ class AlgorithmTHUI extends Algorithm
 		ArrayList<Map.Entry<Integer, Double>> list = new ArrayList<>(ETF.entrySet());
 		list.sort((a, b) -> b.getValue().compareTo(a.getValue()));
 		ETF.clear();
-		for (Map.Entry<Integer, Double> e : list) ETF.put(e.getKey(), e.getValue());
-		if (switches[1] && !list.isEmpty())
+		for (Map.Entry<Integer, Double> e : list)
+			ETF.put(e.getKey(), e.getValue());
+		if (this.switches[1] && !list.isEmpty())
 		{
 			int idx = Math.min(this.k, list.size()) - 1;
 			double tmp = list.get(idx).getValue();
@@ -1340,9 +1447,9 @@ class AlgorithmTHUI extends Algorithm
 		mapItemToUList.clear();
 	}
 	@Override
-	public Number[] runAlgorithm()
+	public Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount)
 	{
-		if (!this.loadDataset())
+		if (!this.loadDataset(inputFilePath, maximumTransactionCount))
 		{
 			return new Number[] { null, null, this.delta };
 		}
@@ -1351,9 +1458,9 @@ class AlgorithmTHUI extends Algorithm
 			this.logger.print("No transactions loaded, cannot run algorithm. ", LogLevel.Error);
 			return new Number[] { null, null, this.delta };
 		}
-		final long startTime = System.nanoTime();
 		try
 		{
+			final long startTime = System.nanoTime();
 			this.computeTWTF(); this.checkMemory();
 			this.sortTWTF(); this.checkMemory();
 			this.computeRTF(); this.checkMemory();
@@ -1362,21 +1469,22 @@ class AlgorithmTHUI extends Algorithm
 			this.pruneItem(); this.checkMemory();
 			this.sortTTFE(); this.checkMemory();
 			this.generateTable(); this.checkMemory();
-			if (switches[2]) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
-			if (switches[3]) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
+			if (this.switches[2]) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
+			if (this.switches[3]) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
 			this.mineWithUtilityLists(); this.checkMemory();
+			final long endTime = System.nanoTime();
+			return new Number[] { endTime - startTime, this.peakMemory, this.delta };
 		}
 		catch (Throwable e)
 		{
+			final long endTime = System.nanoTime();
 			this.logger.print("Failed to execute the THUI algorithm due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
-			return new Number[] { null, null, this.delta };
+			return new Number[] { null, null, null };
 		}
-		final long endTime = System.nanoTime();
-		return new Number[] { endTime - startTime, this.peakMemory, this.delta };
 	}
 	public ArrayList<ArrayList<Integer>> getTopKPatterns()
 	{
-		if (this.finalResults == null || this.finalResults.isEmpty())
+		if (null == this.finalResults || this.finalResults.isEmpty())
 			return new ArrayList<ArrayList<Integer>>();
 		else
 		{
@@ -1390,7 +1498,7 @@ class AlgorithmTHUI extends Algorithm
 	}
 	public ArrayList<Double> getTopKValues()
 	{
-		if (finalResults == null || finalResults.isEmpty())
+		if (null == finalResults || finalResults.isEmpty())
 			return new ArrayList<Double>();
 		else
 		{
@@ -1406,7 +1514,7 @@ class AlgorithmTHUI extends Algorithm
 
 class AlgorithmTHUFI extends Algorithm
 {
-	private class PatternTHUFI implements Comparable<PatternTHUFI>
+	private static class PatternTHUFI implements Comparable<PatternTHUFI>, Serializable
 	{
 		ArrayList<Integer> items = null;
 		double combinedUtility = 0;
@@ -1425,29 +1533,29 @@ class AlgorithmTHUFI extends Algorithm
 	
 	private PriorityQueue<PatternTHUFI> finalResults = new PriorityQueue<>();
 	
-	public AlgorithmTHUFI(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	public AlgorithmTHUFI(final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
-		super(inputFilePath, alpha, beta, delta, k, logger);
+		super(alpha, beta, delta, k, logger);
 	}
 	@Override
-	public Number[] runAlgorithm()
+	public Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount)
 	{
 		final long startTime = System.nanoTime();
 
 		/* Utility */
-		AlgorithmTHUI utilityAlgorithm = new AlgorithmTHUI(this.inputFilePath, this.alpha, this.beta, this.delta, this.k, this.logger);
+		AlgorithmTHUI utilityAlgorithm = new AlgorithmTHUI(this.alpha, this.beta, this.delta, this.k, this.logger);
 		utilityAlgorithm.setColumnIndex(1);
-		final Number[] utilityMetrics = utilityAlgorithm.runAlgorithm();
+		final Number[] utilityMetrics = utilityAlgorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
 		final ArrayList<ArrayList<Integer>> utilityTopKPatterns = utilityAlgorithm.getTopKPatterns();
 		final ArrayList<Double> utilityTopKValues = utilityAlgorithm.getTopKValues();
-
+		
 		/* Frequency */
-		AlgorithmTHUI frequencyAlgorithm = new AlgorithmTHUI(this.inputFilePath, this.alpha, this.beta, this.delta, this.k, this.logger);
+		AlgorithmTHUI frequencyAlgorithm = new AlgorithmTHUI(this.alpha, this.beta, this.delta, this.k, this.logger);
 		frequencyAlgorithm.setColumnIndex(2);
-		final Number[] frequencyMetrics = frequencyAlgorithm.runAlgorithm();
+		final Number[] frequencyMetrics = frequencyAlgorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
 		final ArrayList<ArrayList<Integer>> frequencyTopKPatterns = frequencyAlgorithm.getTopKPatterns();
 		final ArrayList<Double> frequencyTopKValues = frequencyAlgorithm.getTopKValues();
-
+		
 		/* Merge */
 		final LinkedHashMap<ArrayList<Integer>, double[]> combinedMap = new LinkedHashMap<>();
 		for (int i = 0; i < utilityTopKPatterns.size(); ++i)
@@ -1455,7 +1563,7 @@ class AlgorithmTHUFI extends Algorithm
 			ArrayList<Integer> items = utilityTopKPatterns.get(i);
 			double utility = utilityTopKValues.get(i);
 			double[] vals = combinedMap.get(items);
-			if (vals == null)
+			if (null == vals)
 				combinedMap.put(items, new double[] { utility, 0.0 });
 			else
 				vals[0] = utility;
@@ -1465,12 +1573,11 @@ class AlgorithmTHUFI extends Algorithm
 			ArrayList<Integer> items = frequencyTopKPatterns.get(i);
 			double frequency = frequencyTopKValues.get(i);
 			double[] vals = combinedMap.get(items);
-			if (vals == null)
+			if (null == vals)
 				combinedMap.put(items, new double[] { 0.0, frequency });
 			else
 				vals[1] = frequency;
 		}
-
 		for (Map.Entry<ArrayList<Integer>, double[]> entry : combinedMap.entrySet())
 		{
 			double u = entry.getValue()[0];
@@ -1480,7 +1587,7 @@ class AlgorithmTHUFI extends Algorithm
 			while (finalResults.size() > this.k)
 				finalResults.poll();
 		}
-
+		
 		final long endTime = System.nanoTime();
 		
 		/* Metrics */
@@ -1491,11 +1598,11 @@ class AlgorithmTHUFI extends Algorithm
 			peakMemory = (Long)utilityMetrics[1];
 		else if (frequencyMetrics[1] != null)
 			peakMemory = (Long)frequencyMetrics[1];
-		if ((double)utilityMetrics[2] != Double.NEGATIVE_INFINITY && (double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
+		if (utilityMetrics[2] != null && (double)utilityMetrics[2] != Double.NEGATIVE_INFINITY && frequencyMetrics[2] != null && (double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
 			this.delta = this.alpha * (double)utilityMetrics[2] + this.beta * (double)frequencyMetrics[2];
-		else if ((double)utilityMetrics[2] != Double.NEGATIVE_INFINITY)
+		else if (utilityMetrics[2] != null && (double)utilityMetrics[2] != Double.NEGATIVE_INFINITY)
 			this.delta = (double)utilityMetrics[2];
-		else if ((double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
+		else if (frequencyMetrics[2] != null && (double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
 			this.delta = (double)frequencyMetrics[2];
 		return new Number[] { endTime - startTime, peakMemory, this.delta };
 	}
@@ -1508,7 +1615,6 @@ class AlgorithmTHUFI extends Algorithm
 			keys.add(new ArrayList<>(p.items));
 		return keys;
 	}
-
 	public ArrayList<Double> getTopKValues()
 	{
 		ArrayList<PatternTHUFI> sorted = new ArrayList<>(finalResults);
@@ -1522,7 +1628,7 @@ class AlgorithmTHUFI extends Algorithm
 
 class AlgorithmTTFE extends Algorithm
 {
-	private class TF
+	private class TF implements Serializable
 	{
 		double threat, frequency, tf, rtf;
 		
@@ -1533,19 +1639,23 @@ class AlgorithmTTFE extends Algorithm
 			this.tf = alpha * threat + beta * frequency;
 		}
 	}
-	private class Transaction
+	private static class Transaction implements Serializable
 	{
 		int tid = 0;
 		LinkedHashMap<Integer, TF> events = new LinkedHashMap<>();
 		Double ttf = null;
 		
+		public Transaction()
+		{
+			
+		}
 		public Transaction(int tid)
 		{
-			this.tid = tid;
+			this.setTid(tid);
 		}
-		boolean contains(Integer item)
+		public void setTid(int tid)
 		{
-			return this.events.containsKey(item);
+			this.tid = tid;
 		}
 		boolean put(Integer item, TF tf)
 		{
@@ -1556,6 +1666,10 @@ class AlgorithmTTFE extends Algorithm
 				events.put(item, tf);
 				return true;
 			}
+		}
+		boolean contains(Integer item)
+		{
+			return this.events.containsKey(item);
 		}
 		boolean remove(Integer item)
 		{
@@ -1588,14 +1702,14 @@ class AlgorithmTTFE extends Algorithm
 			return -1;
 		}
 	}
-	private class Event
+	private static class Event implements Serializable
 	{
 		int event;
 		LinkedHashMap<Integer, TF> transactions = new LinkedHashMap<>();
-
+		
 		Event(int event) { this.event = event; }
 	}
-	private class Table
+	private static class Table implements Serializable
 	{
 		String name;
 		int[] index, columns, sequence;
@@ -1633,7 +1747,7 @@ class AlgorithmTTFE extends Algorithm
 			return arr;
 		}
 	}
-	private class UElement
+	private static class UElement implements Serializable
 	{
 		final int tid;
 		double iutils;
@@ -1644,7 +1758,7 @@ class AlgorithmTTFE extends Algorithm
 			this.tid = tid; this.iutils = iutils; this.rutils = rutils;
 		}
 	}
-	private class UList
+	protected static class UList implements Serializable
 	{
 		Integer item;
 		double sumIutils = 0;
@@ -1660,7 +1774,7 @@ class AlgorithmTTFE extends Algorithm
 			elements.add(e);
 		}
 	}
-	private class HTFE implements Comparable<HTFE>
+	protected static class HTFE implements Comparable<HTFE>, Serializable
 	{
 		ArrayList<Integer> sequence;
 		double eetf;
@@ -1684,17 +1798,17 @@ class AlgorithmTTFE extends Algorithm
 	private Table LETF = null;
 	private final PriorityQueue<Double> letf_e = new PriorityQueue<>();
 	private final PriorityQueue<Double> letf_lb = new PriorityQueue<>();
-	private final PriorityQueue<HTFE> finalResults = new PriorityQueue<>();
+	protected final PriorityQueue<HTFE> finalResults = new PriorityQueue<>();
 	private int candidateCount = 0;
 	private final int BUFFERS_SIZE = 200;
 	
-	public AlgorithmTTFE(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	public AlgorithmTTFE(final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
-		super(inputFilePath, alpha, beta, delta, k, logger);
+		super(alpha, beta, delta, k, logger);
 	}
 	
 	/* Child procedures */
-	private void savePattern(int[] prefix, int length, UList X)
+	protected void savePattern(int[] prefix, final int length, UList X)
 	{
 		ArrayList<Integer> seq = new ArrayList<>();
 		for (int i = 0; i < length; ++i)
@@ -1703,13 +1817,9 @@ class AlgorithmTTFE extends Algorithm
 		HTFE htfe = new HTFE(seq, X.sumIutils);
 		finalResults.offer(htfe);
 		while (finalResults.size() > this.k)
-		{
 			finalResults.poll();
-		}
 		if (finalResults.size() >= this.k)
-		{
-			delta = finalResults.peek().eetf;
-		}
+			this.delta = this.finalResults.peek().eetf;
 	}
 	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
 	{
@@ -1784,9 +1894,9 @@ class AlgorithmTTFE extends Algorithm
 	}
 	
 	/* Main procedures */
-	private boolean loadDataset()
+	private boolean loadDataset(final String inputFilePath, final int maximumTransactionCount)
 	{
-		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(this.inputFilePath), StandardCharsets.UTF_8)))
+		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(inputFilePath), StandardCharsets.UTF_8)))
 		{
 			String line = null;
 			int tid = 0;
@@ -1796,7 +1906,7 @@ class AlgorithmTTFE extends Algorithm
 				line = line.trim();
 				if (!line.isEmpty() && '1' <= line.charAt(0) && line.charAt(0) <= '9')
 				{
-					Transaction transaction = new Transaction(++tid);
+					Transaction transaction = new Transaction();
 					final String[] parts = line.split(":");
 					if (parts.length >= 3)
 					{
@@ -1817,7 +1927,10 @@ class AlgorithmTTFE extends Algorithm
 									transaction.put(event, new TF(threat, frequency));
 								}
 								transaction.ttf = ttf;
+								transaction.tid = ++tid;
 								transactions.add(transaction);
+								if (tid >= maximumTransactionCount)
+									break;
 							}
 							catch (Throwable e)
 							{
@@ -1841,7 +1954,7 @@ class AlgorithmTTFE extends Algorithm
 		}
 		catch (Throwable e)
 		{
-			this.logger.print("Failed to load the dataset " + Formatter.escapeString(this.inputFilePath) + " due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
+			this.logger.print("Failed to load the dataset " + Formatter.escapeString(inputFilePath) + " due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
 			return false;
 		}
 	}
@@ -1903,7 +2016,7 @@ class AlgorithmTTFE extends Algorithm
 		list.sort((a, b) -> b.getValue().compareTo(a.getValue()));
 		ETF.clear();
 		for (Map.Entry<Integer, Double> e : list) ETF.put(e.getKey(), e.getValue());
-		if (switches[1] && !list.isEmpty())
+		if (this.switches[1] && !list.isEmpty())
 		{
 			int idx = Math.min(this.k, list.size()) - 1;
 			double tmp = list.get(idx).getValue();
@@ -2077,9 +2190,9 @@ class AlgorithmTTFE extends Algorithm
 		mapItemToUList.clear();
 	}
 	@Override
-	public Number[] runAlgorithm()
+	public Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount)
 	{
-		if (!this.loadDataset())
+		if (!this.loadDataset(inputFilePath, maximumTransactionCount))
 		{
 			return new Number[] { null, null, this.delta };
 		}
@@ -2088,9 +2201,9 @@ class AlgorithmTTFE extends Algorithm
 			this.logger.print("No transactions loaded, cannot run algorithm. ", LogLevel.Error);
 			return new Number[] { null, null, this.delta };
 		}
-		final long startTime = System.nanoTime();
 		try
 		{
+			final long startTime = System.nanoTime();
 			this.computeTWTF(); this.checkMemory();
 			this.sortTWTF(); this.checkMemory();
 			this.computeRTF(); this.checkMemory();
@@ -2099,26 +2212,38 @@ class AlgorithmTTFE extends Algorithm
 			this.pruneItem(); this.checkMemory();
 			this.sortTTFE(); this.checkMemory();
 			this.generateTable(); this.checkMemory();
-			if (switches[2]) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
-			if (switches[3]) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
+			if (this.switches[2]) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
+			if (this.switches[3]) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
 			this.mineWithEnumerationTree(); this.checkMemory();
+			final long endTime = System.nanoTime();
+			return new Number[] { endTime - startTime, this.peakMemory, this.delta };
 		}
 		catch (Exception e)
 		{
-			this.logger.print("Algorithm execution failed: " + e.getMessage(), LogLevel.Error);
-			return new Number[] { null, null, this.delta };
+			this.logger.print("Failed to execute the TTFE algorithm due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
+			return new Number[] { null, null, null };
 		}
-		final long endTime = System.nanoTime();
-		return new Number[] { endTime - startTime, this.peakMemory, this.delta };
 	}
 }
 
 class AlgorithmGUMM extends AlgorithmTTFE
 {
-	public AlgorithmGUMM(final String inputFilePath, final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	public AlgorithmGUMM(final double alpha, final double beta, final double delta, final int k, final Logger logger)
 	{
-		super(inputFilePath, alpha, beta, delta, k, logger);
+		super(alpha, beta, delta, k, logger);
 		this.switches = new boolean[] { false, false, false, false, false, false };
+	}
+	@Override
+	protected void savePattern(int[] prefix, int length, UList X)
+	{
+		ArrayList<Integer> seq = new ArrayList<>();
+		for (int i = 0; i < length; ++i)
+			seq.add(prefix[i]);
+		seq.add(X.item);
+		HTFE htfe = new HTFE(seq, X.sumIutils);
+		finalResults.offer(htfe);
+		while (finalResults.size() > this.k)
+			finalResults.poll();
 	}
 }
 
@@ -2150,10 +2275,10 @@ class Saver
 	}
 	private final boolean displayOnConsole(Object[][] results, final int leftClosing, final int rightOpening)
 	{
-		System.out.println(Formatter.array2String(this.columns, "", "\t", System.lineSeparator(), column -> Formatter.filterPrintableAsciiCharacters(column)));
+		System.out.println(Formatter.array2String(this.columns, "", "\t", "", column -> Formatter.filterString(column)));
 		final int realLeftClosing = Math.max(0, leftClosing), realRightOpening = Math.min(rightOpening, results.length);
 		for (int rIndex = realLeftClosing; rIndex < realRightOpening; ++rIndex)
-			System.out.println(Formatter.array2String(results[rIndex], "", "\t", System.lineSeparator(), r -> Formatter.filterPrintableAsciiCharacters(r)));
+			System.out.println(Formatter.array2String(results[rIndex], "", "\t", "", r -> Formatter.filterString(r)));
 		System.out.println();
 		return true;
 	}
@@ -2161,10 +2286,10 @@ class Saver
 	{
 		try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(this.outputFilePath), StandardCharsets.UTF_8)))
 		{
-			writer.write(Formatter.array2String(this.columns, "", ",", LINE_SEPARATOR, column -> Formatter.escapeCSV(Formatter.filterPrintableAsciiCharacters(column))));
+			writer.write(Formatter.array2String(this.columns, "", ",", LINE_SEPARATOR, column -> Formatter.escapeCSV(Formatter.filterString(column))));
 			final int realLeftClosing = Math.max(0, leftClosing), realRightOpening = Math.min(rightOpening, results.length);
 			for (int rIndex = realLeftClosing; rIndex < realRightOpening; ++rIndex)
-				writer.write(Formatter.array2String(results[rIndex], "", ",", LINE_SEPARATOR, r -> Formatter.escapeCSV(Formatter.filterPrintableAsciiCharacters(r))));
+				writer.write(Formatter.array2String(results[rIndex], "", ",", LINE_SEPARATOR, r -> Formatter.escapeCSV(Formatter.filterString(r))));
 			this.logger.print("Saver: Successfully saved the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath + " in the CSV format. ", LogLevel.Info);
 			return true;
 		}
@@ -2202,7 +2327,7 @@ class Saver
 			writer.write("\t\t\t<caption>Results</caption>" + LINE_SEPARATOR);
 			writer.write("\t\t\t<thead>" + LINE_SEPARATOR);
 			writer.write("\t\t\t\t<tr>" + LINE_SEPARATOR);
-			writer.write(Formatter.array2String(this.columns, "", "", "", column -> "<th>" + Formatter.escapeHTML(Formatter.filterPrintableAsciiCharacters(column)) + "</th>"));
+			writer.write(Formatter.array2String(this.columns, "", "", "", column -> "<th>" + Formatter.escapeHTML(Formatter.filterString(column)) + "</th>"));
 			writer.write("\t\t\t\t</tr>" + LINE_SEPARATOR);
 			writer.write("\t\t\t</thead>" + LINE_SEPARATOR);
 			writer.write("\t\t\t<tbody>" + LINE_SEPARATOR);
@@ -2211,7 +2336,7 @@ class Saver
 			{
 				writer.write("\t\t\t\t<tr>" + LINE_SEPARATOR);
 				writer.write(Formatter.array2String(
-					results[rIndex], "", "", "", r -> "\t\t\t\t\t<td>" + Formatter.escapeHTML(Formatter.filterPrintableAsciiCharacters(r)) + "</td>" + LINE_SEPARATOR
+					results[rIndex], "", "", "", r -> "\t\t\t\t\t<td>" + Formatter.escapeHTML(Formatter.filterString(r)) + "</td>" + LINE_SEPARATOR
 				));
 				writer.write("\t\t\t\t</tr>" + LINE_SEPARATOR);
 			}
@@ -2287,7 +2412,7 @@ class Saver
 				{
 					final String tag = Formatter.escapeXMLTag(this.columns[cIndex]), r = cIndex < results[rIndex].length ? String.valueOf(results[rIndex][cIndex]) : "";
 					writer.write("\t\t<" + tag + ">" + LINE_SEPARATOR);
-					writer.write("\t\t\t" + Formatter.escapeXMLContent(Formatter.filterPrintableAsciiCharacters(r)) + LINE_SEPARATOR);
+					writer.write("\t\t\t" + Formatter.escapeXMLContent(Formatter.filterString(r)) + LINE_SEPARATOR);
 					writer.write("\t\t</" + tag + ">" + LINE_SEPARATOR);
 				}
 				writer.write("\t</result>" + LINE_SEPARATOR);
@@ -2311,23 +2436,23 @@ class Saver
 	{
 		try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(this.outputFilePath), StandardCharsets.UTF_8)))
 		{
-			writer.write("\\documentclass[a4paper]{article}");
-			writer.write("\\usepackage{booktabs}");
-			writer.write("\\usepackage{rotating}");
-			writer.write("\\begin{document}");
-			writer.write("\\begin{sidewaystable}");
-			writer.write("\\caption{Results}");
-			writer.write("\\centering");
-			writer.write("\\begin{tabular}{" + "c".repeat(this.columns.length) + "}");
-			writer.write("\\toprule");
-			writer.write(Formatter.array2String(this.columns, "", " & ", "\\\\", column -> Formatter.filterPrintableAsciiCharacters(column)));
-			writer.write("\\midrule");
+			writer.write("\\documentclass[a4paper]{article}" + LINE_SEPARATOR);
+			writer.write("\\usepackage{booktabs}" + LINE_SEPARATOR);
+			writer.write("\\usepackage{rotating}" + LINE_SEPARATOR + LINE_SEPARATOR);
+			writer.write("\\begin{document}" + LINE_SEPARATOR + LINE_SEPARATOR);
+			writer.write("\\begin{sidewaystable}" + LINE_SEPARATOR);
+			writer.write("\t\\caption{The comparison results. }" + LINE_SEPARATOR);
+			writer.write("\t\\centering" + LINE_SEPARATOR);
+			writer.write("\t\\begin{tabular}{" + "c".repeat(this.columns.length) + "}" + LINE_SEPARATOR);
+			writer.write("\t\t\\toprule" + LINE_SEPARATOR);
+			writer.write("\t\t" + Formatter.array2String(this.columns, "", " & ", "\\\\", column -> Formatter.filterString(column)) + LINE_SEPARATOR);
+			writer.write("\t\t\\midrule" + LINE_SEPARATOR);
 			final int realLeftClosing = Math.max(0, leftClosing), realRightOpening = Math.min(rightOpening, results.length);
 			for (int rIndex = realLeftClosing; rIndex < realRightOpening; ++rIndex)
-				writer.write(Formatter.array2String(results[rIndex], "", " & ", "\\\\", r -> Formatter.filterPrintableAsciiCharacters(r)));
-			writer.write("\\bottomrule");
-			writer.write("\\end{tabular}");
-			writer.write("\\end{sidewaystable}");
+				writer.write("\t\t" + Formatter.array2String(results[rIndex], "", " & ", "\\\\", r -> Formatter.filterString(r)) + LINE_SEPARATOR);
+			writer.write("\t\t\\bottomrule" + LINE_SEPARATOR);
+			writer.write("\t\\end{tabular}" + LINE_SEPARATOR);
+			writer.write("\\end{sidewaystable}" + LINE_SEPARATOR + LINE_SEPARATOR);
 			writer.write("\\end{document}");
 			this.logger.print("Saver: Successfully saved the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath + "in the TEX format. ", LogLevel.Info);
 			return true;
@@ -2347,10 +2472,10 @@ class Saver
 	{
 		try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(this.outputFilePath), StandardCharsets.UTF_8)))
 		{
-			writer.write(Formatter.array2String(this.columns, "", "\t", System.lineSeparator(), column -> Formatter.filterPrintableAsciiCharacters(column)));
+			writer.write(Formatter.array2String(this.columns, "", "\t", LINE_SEPARATOR, column -> Formatter.filterString(column)));
 			final int realLeftClosing = Math.max(0, leftClosing), realRightOpening = Math.min(rightOpening, results.length);
 			for (int rIndex = realLeftClosing; rIndex < realRightOpening; ++rIndex)
-				writer.write(Formatter.array2String(results[rIndex], "", "\t", System.lineSeparator(), r -> Formatter.filterPrintableAsciiCharacters(r)));
+				writer.write(Formatter.array2String(results[rIndex], "", "\t", LINE_SEPARATOR, r -> Formatter.filterString(r)));
 			this.logger.print("Saver: Successfully saved the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath + "in the TSV format. ", LogLevel.Info);
 			return true;
 		}
@@ -2433,17 +2558,15 @@ public class TopKMining
 				logger.print(traces, LogLevel.Trace);
 			if (logs != null && !logs.isEmpty())
 				logger.print(logs, LogLevel.Debug);
-			final String dataset = parser.getDataset();
-			final int runCount = parser.getRunCount();
 			if (flag)
 			{
 				/* Parameters */
 				LinkedHashMap<String, Function<Number[], Algorithm>> algorithms = new LinkedHashMap<>();
-				algorithms.put("THUFI", parameters -> new AlgorithmTHUFI(dataset, (double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
-				algorithms.put("GUMM", parameters -> new AlgorithmGUMM(dataset, (double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
-				algorithms.put("TTFE", parameters -> new AlgorithmTTFE(dataset, (double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
+				algorithms.put("THUFI", parameters -> new AlgorithmTHUFI((double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
+				algorithms.put("GUMM", parameters -> new AlgorithmGUMM((double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
+				algorithms.put("TTFE", parameters -> new AlgorithmTTFE((double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
 				final double[] alphaValues = { 0, 0.25, 0.5, 0.75, 1 };
-				final double[] defaultAlphaValue = { Algorithm.getDefaultAlpha() };
+				final double[] alphaValue = { 0.5 };
 				final double[] deltaValues = { Double.NEGATIVE_INFINITY };
 				final int[] kValues = { 5, 10, 50, 100, 500, 1000, 5000, 10000 };
 				
@@ -2453,13 +2576,15 @@ public class TopKMining
 				final int length = columns.length, metricLength = 3;
 				Object[][] results = new Object[algorithms.size() * alphaValues.length * deltaValues.length * kValues.length][length];
 				int outerIndex = 0;
-				final String datasetName = Formatter.filterMainFileName(dataset);
+				final String inputFilePath = parser.getDataset();
+				final String datasetName = Formatter.filterMainFileName(inputFilePath);
+				final int maximumTransactionCount = parser.getMaximumTransactionCount(), runCount = parser.getRunCount();
 				Saver saver = new Saver(parser.getOutputFilePath(), columns, logger);
 				for (Map.Entry<String, Function<Number[], Algorithm>> entry : algorithms.entrySet())
 				{
 					final String algorithmName = entry.getKey();
 					final Function<Number[], Algorithm> algorithmFactory = entry.getValue();
-					for (final double alpha : ("TTFE" == algorithmName ? alphaValues : defaultAlphaValue))
+					for (final double alpha : ("TTFE" == algorithmName ? alphaValues : alphaValue))
 					{
 						parameters[0] = alpha;
 						final double beta = 1 - alpha;
@@ -2480,7 +2605,7 @@ public class TopKMining
 								), LogLevel.Debug);
 								System.gc();
 								Algorithm algorithm = algorithmFactory.apply(parameters);
-								Number[] result = algorithm.runAlgorithm();
+								Number[] result = algorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
 								if (null == result || result.length != metricLength)
 									for (int i = 0; i < metricLength; ++i)
 										results[outerIndex][innerIndex++] = null;
@@ -2489,7 +2614,7 @@ public class TopKMining
 									for (int run = 2; run < runCount; ++run)
 									{
 										algorithm = algorithmFactory.apply(parameters);
-										Number[] r = algorithm.runAlgorithm();
+										Number[] r = algorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
 										if (null == r || r.length != metricLength)
 										{
 											for (int i = 0; i < metricLength; ++i)
@@ -2535,13 +2660,7 @@ public class TopKMining
 			}
 			else
 			{
-				if ((null == dataset || dataset.isEmpty()) ^ (runCount < 1))
-					if (runCount < 1)
-						logger.print("The run count must be a positive integer. ", LogLevel.Fatal);
-					else
-						logger.print("A path to the dataset must be specified. ", LogLevel.Fatal);
-				else
-					logger.print("A path to the dataset must be specified, and the run count must be a positive integer. ", LogLevel.Fatal);
+				logger.print("A path to the dataset must be specified. ", LogLevel.Fatal);
 				System.exit(EOF);
 			}
 		}
