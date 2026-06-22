@@ -383,7 +383,7 @@ class Parser
 			else
 			{
 				int frontIndex = 0, radix = 0, endIndex = realNumberString.length() - 1, integerValue = 0;
-				boolean isNegative = false, isSpecial = false;
+				boolean isNegative = false, isRegular = true;
 				for (boolean breakFlag = false; frontIndex < realNumberString.length(); ++frontIndex)
 				{
 					switch (realNumberString.charAt(frontIndex))
@@ -486,21 +486,16 @@ class Parser
 					{
 					case "inf":
 						number = isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
-						isSpecial = true;
+						isRegular = false;
 						break;
 					case "nan":
-						isSpecial = true;
+						isRegular = false;
 						break;
 					default:
 						break;
 					}
 				}
-				if (isSpecial)
-				{
-					final String trace = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + ". ";
-					this.traces = this.traces instanceof String ? this.traces + trace : "Parser: " + trace;
-				}
-				else
+				if (isRegular)
 				{
 					if (0 == radix)
 						radix = 10;
@@ -570,7 +565,6 @@ class Parser
 						issues.add("an overflow signal captured");
 					if (issues.isEmpty())
 					{
-						System.out.println("number class: " + number.getClass() + " value: " + number);
 						final String trace = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + ". ";
 						this.traces = this.traces instanceof String ? this.traces + trace : "Parser: " + trace;
 					}
@@ -579,6 +573,11 @@ class Parser
 						final String warning = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + " with " + Formatter.arrayList2String(issues) + ". ";
 						this.warnings = this.warnings instanceof String ? this.warnings + warning : "Parser: " + warning;
 					}
+				}
+				else
+				{
+					final String trace = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + ". ";
+					this.traces = this.traces instanceof String ? this.traces + trace : "Parser: " + trace;
 				}
 				return number;
 			}
@@ -619,10 +618,13 @@ class Parser
 					missingArgument = true;
 			else if (containing(LogLevelArguments, arguments[i]))
 				if (++i < arguments.length)
-				{
-					if (!this.parseLogLevel(arguments[i]))
+					if (this.parseLogLevel(arguments[i]))
+						if (this.traces instanceof String)
+							this.traces += "Parsed " + Formatter.escapeString(arguments[i]) + " as " + this.logLevel + ". ";
+						else
+							this.traces = "Parser: Parsed " + Formatter.escapeString(arguments[i]) + " as " + this.logLevel + ". ";
+					else
 						invalidArgumentIndexes.add(i);
-				}
 				else
 					missingArgument = true;
 			else if (containing(MaximumTransactionCountArguments, arguments[i]))
@@ -757,10 +759,10 @@ class Logger
 		System.out.print(CONTENT_COLOR);
 		System.err.print(CONTENT_COLOR);
 		if (COLORING_DISABLED)
-			this.print("Logger: The logger has been initialized. The coloring is disabled. ", LogLevel.Debug);
+			this.print("Logger: The logger has been initialized. The log level is " + this.logLevel + ". The coloring is disabled. ", LogLevel.Debug);
 		else
 			this.print(
-				"Logger: The logger has been initialized. The coloring is enabled as " + TRACE_PROMPT + ", " + DEBUG_PROMPT + ", "
+				"Logger: The logger has been initialized. The log level is " + this.logLevel + ". The coloring is enabled as " + TRACE_PROMPT + ", " + DEBUG_PROMPT + ", "
 				+ INFO_PROMPT + ", " + WARNING_PROMPT + ", " + ERROR_PROMPT + ", and " + FATAL_PROMPT + ". ", 
 				LogLevel.Debug
 			);
@@ -801,24 +803,27 @@ abstract class Algorithm implements Serializable
 	private static final double DefaultAlpha = 0.5, DefaultBeta = 0.5, DefaultDelta = Double.NEGATIVE_INFINITY;
 	private static final int DefaultK = 10;
 	
-	protected double alpha = DefaultAlpha, beta = DefaultBeta, delta = DefaultDelta;
-	protected int k = DefaultK;
-	protected transient Logger logger = null;
-	protected long peakMemory = 0L;
+	String algorithmName = "Specified";
+	double alpha = DefaultAlpha, beta = DefaultBeta, delta = DefaultDelta;
+	int k = DefaultK;
+	transient Logger logger = null;
+	long peakMemory = 0L;
 	
-	public Algorithm(final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	Algorithm(final String _algorithmName, final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
 	{
-		this.alpha = alpha;
-		this.beta = beta;
-		this.delta = delta;
-		this.k = k;
-		this.logger = null == logger ? new Logger() : logger;
+		if (_algorithmName instanceof String)
+			this.algorithmName = _algorithmName;
+		this.alpha = _alpha;
+		this.beta = _beta;
+		this.delta = _delta;
+		this.k = _k;
+		this.logger = _logger instanceof Logger ? _logger : new Logger();
 		if (this.alpha < 0 || 1 < this.alpha || this.beta < 0 || 1 < this.beta || this.alpha + this.beta != 1)
 		{
 			this.alpha = DefaultAlpha;
 			this.beta = DefaultBeta;
 			this.logger.print(
-				"Algorithm: The variables $\\alpha$ and $\\beta$ should be two doubles satisfying "
+				"Algorithm" + this.algorithmName + ": The variables $\\alpha$ and $\\beta$ should be two doubles satisfying "
 				+ "$0 \\leqslant \\alpha \\leqslant \\land 0 \\leqslant \\beta \\leqslant 1 \\land \\alpha + \\beta = 1$, "
 				+ "but they are not, which have been defaulted to " + DefaultAlpha + " and " + DefaultBeta + ", respectively. ", 
 				LogLevel.Warning
@@ -827,41 +832,49 @@ abstract class Algorithm implements Serializable
 		if (this.k < 1)
 		{
 			this.k = DefaultK;
-			this.logger.print("Algorithm: The variable $k$ should be a positive integer, but it is not, which has been defaulted to " + DefaultK + ". ", LogLevel.Warning);
+			this.logger.print(
+				"Algorithm" + this.algorithmName + ": The variable $k$ should be a positive integer, but it is not, which has been defaulted to " + DefaultK + ". ", 
+				LogLevel.Warning
+			);
 		}
-		checkMemory();
+		this.logger.print(
+			"Algorithm" + this.algorithmName + ": Initialized the " + this.algorithmName + " algorithm with $\\alpha = " + this.alpha
+			+ "$, $\\beta = " + this.beta + "$, $\\delta = " + String.valueOf(this.delta).replace("Infinity", "\\infty") + "$, and $k = " + this.k + ". ", 
+			LogLevel.Debug
+		);
+		this.checkMemory();
 	}
-	protected final boolean checkMemory()
+	final boolean checkMemory()
 	{
 		try
 		{
-			final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			final ObjectOutputStream oos = new ObjectOutputStream(baos);
-			oos.writeObject(this);
-			oos.close();
-			final long size = baos.size();
-			if (size > this.peakMemory)
+			final ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+			final ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
+			objectOutputStream.writeObject(this);
+			objectOutputStream.close();
+			final long currentMemory = byteArrayOutputStream.size();
+			if (currentMemory > this.peakMemory)
 			{
-				this.peakMemory = size;
+				this.peakMemory = currentMemory;
 				return true;
 			}
-			else
-				return false;
 		}
 		catch (Throwable e)
 		{
 			this.logger.print("Algorithm: Failed to check memory due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
-			return false;
 		}
+		return false;
 	}
 	public abstract Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount);
+	public abstract ArrayList<ArrayList<Integer>> getTopKPatterns();
+	public abstract ArrayList<Double> getTopKValues();
 }
 
 class AlgorithmTHUI extends Algorithm
 {
 	private static class ItemInfo implements Serializable
 	{
-		double utility, rtf;
+		double utility = 0.0, rtf = 0.0;
 		
 		ItemInfo(double utility)
 		{
@@ -875,15 +888,15 @@ class AlgorithmTHUI extends Algorithm
 		LinkedHashMap<Integer, ItemInfo> items = new LinkedHashMap<>();
 		Double ttf = null;
 		
-		public Transaction()
+		Transaction()
 		{
 			
 		}
-		public Transaction(int tid)
+		Transaction(int tid)
 		{
 			this.setTid(tid);
 		}
-		public void setTid(int tid)
+		void setTid(int tid)
 		{
 			this.tid = tid;
 		}
@@ -934,10 +947,13 @@ class AlgorithmTHUI extends Algorithm
 	}
 	private static class ItemEvent implements Serializable
 	{
-		int item;
+		int item = 0;
 		LinkedHashMap<Integer, ItemInfo> transactions = new LinkedHashMap<>();
 
-		ItemEvent(int item) { this.item = item; }
+		ItemEvent(int item)
+		{
+			this.item = item;
+		}
 	}
 	private static class Table implements Serializable
 	{
@@ -977,43 +993,46 @@ class AlgorithmTHUI extends Algorithm
 	}
 	private static class UElement implements Serializable
 	{
-		final int tid;
-		double iutils;
-		double rutils;
+		int tid = 0;
+		double iutils = 0.0;
+		double rutils = 0.0;
 
 		UElement(int tid, double iutils, double rutils)
 		{
-			this.tid = tid; this.iutils = iutils; this.rutils = rutils;
+			this.tid = tid;
+			this.iutils = iutils;
+			this.rutils = rutils;
 		}
 	}
 	private static class UList implements Serializable
 	{
-		Integer item;
-		double sumIutils = 0;
-		double sumRutils = 0;
+		Integer item = null;
+		double sumIutils = 0.0;
+		double sumRutils = 0.0;
 		ArrayList<UElement> elements = new ArrayList<>();
-
-		UList(Integer item) { this.item = item; }
-
+		
+		UList(Integer item)
+		{
+			this.item = item;
+		}
 		void addElement(UElement e)
 		{
-			sumIutils += e.iutils;
-			sumRutils += e.rutils;
-			elements.add(e);
+			this.sumIutils += e.iutils;
+			this.sumRutils += e.rutils;
+			this.elements.add(e);
 		}
 	}
 
 	private static class HTFE implements Comparable<HTFE>, Serializable
 	{
-		ArrayList<Integer> sequence;
-		double eetf;
-
+		ArrayList<Integer> sequence = null;
+		double eetf = 0.0;
+		
 		HTFE(ArrayList<Integer> seq, double eetf)
 		{
 			this.sequence = new ArrayList<>(seq);
 			this.eetf = eetf;
 		}
-
 		@Override
 		public int compareTo(HTFE o) { return Double.compare(this.eetf, o.eetf); }
 	}
@@ -1021,7 +1040,7 @@ class AlgorithmTHUI extends Algorithm
 	static private int DefaultColumnIndex = 2;
 	
 	private int columnIndex = DefaultColumnIndex;
-	private boolean[] switches = { false, true, false, false, false, false };
+	private boolean strategyPruning = true, strategy_ETF = false, strategy_LETF_E = false, strategy_LETF_LB = false;
 	private final ArrayList<Transaction> transactions = new ArrayList<>();
 	private LinkedHashMap<Integer, Double> TWTF = new LinkedHashMap<>();
 	private int[] sequence = null;
@@ -1034,9 +1053,9 @@ class AlgorithmTHUI extends Algorithm
 	private int candidateCount = 0;
 	private final int BUFFERS_SIZE = 200;
 	
-	public AlgorithmTHUI(final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	public AlgorithmTHUI(final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
 	{
-		super(alpha, beta, delta, k, logger);
+		super("THUI", _alpha, _beta, _delta, _k, _logger);
 	}
 	public boolean setColumnIndex(final int index)
 	{
@@ -1058,14 +1077,10 @@ class AlgorithmTHUI extends Algorithm
 		seq.add(X.item);
 		HTFE htfe = new HTFE(seq, X.sumIutils);
 		finalResults.offer(htfe);
-		while (finalResults.size() > this.k)
-		{
-			finalResults.poll();
-		}
-		if (finalResults.size() >= this.k)
-		{
+		while (this.finalResults.size() > this.k)
+			this.finalResults.poll();
+		if (this.strategyPruning && this.finalResults.size() >= this.k)
 			this.delta = this.finalResults.peek().eetf;
-		}
 	}
 	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
 	{
@@ -1094,7 +1109,6 @@ class AlgorithmTHUI extends Algorithm
 			}
 		}
 	}
-
 	private UList construct(UList P, UList px, UList py)
 	{
 		UList pxyUL = new UList(py.item);
@@ -1188,13 +1202,18 @@ class AlgorithmTHUI extends Algorithm
 				}
 			}
 			if (colonWarningFlag)
-				this.logger.print("One or more effective lines contain fewer than " + this.columnIndex + " colon(s), which have been skipped. ", LogLevel.Warning);
+				this.logger.print(
+					"Algorithm" + this.algorithmName + ": One or more effective lines contain fewer than " + this.columnIndex + " colon(s), which have been skipped. ", LogLevel.Warning
+				);
 			if (countWarningFlag)
-				this.logger.print("One or more effective lines contain inconsistent counts of items and utilities, which have been skipped. ", LogLevel.Warning);
+				this.logger.print(
+					"Algorithm" + this.algorithmName + ": One or more effective lines contain inconsistent counts of items and utilities, which have been skipped. ", LogLevel.Warning
+				);
 			if (parsingWarningFlag)
-				this.logger.print("One or more effective lines contain failures in parsing numbers, which have been skipped. ", LogLevel.Warning);
+				this.logger.print("Algorithm" + this.algorithmName + ": One or more effective lines contain failures in parsing numbers, which have been skipped. ", LogLevel.Warning);
+			if (this.transactions.isEmpty())
+				this.logger.print("Algorithm" + this.algorithmName + ": No effective transactions were loaded from " + Formatter.escapeString(inputFilePath) + ". ", LogLevel.Warning);
 			return true;
-			
 		}
 		catch (Throwable e)
 		{
@@ -1202,14 +1221,12 @@ class AlgorithmTHUI extends Algorithm
 			return false;
 		}
 	}
-
 	private void computeTWTF()
 	{
 		for (Transaction transaction : this.transactions)
 			for (Integer item : transaction.items.keySet())
 				this.TWTF.put(item, TWTF.getOrDefault(item, 0.0) + transaction.ttf);
 	}
-
 	private void sortTWTF()
 	{
 		ArrayList<Map.Entry<Integer, Double>> list = new ArrayList<>(TWTF.entrySet());
@@ -1226,39 +1243,24 @@ class AlgorithmTHUI extends Algorithm
 			++i;
 		}
 	}
-
 	private void computeRTF()
 	{
 		for (Transaction t : transactions)
-		{
 			for (int i = 0; i < sequence.length; ++i)
-			{
 				if (t.items.containsKey(sequence[i]))
 				{
 					for (int j = i + 1; j < sequence.length; j++)
-					{
 						if (t.items.containsKey(sequence[j]))
-						{
 							t.items.get(sequence[i]).rtf += t.items.get(sequence[j]).utility;
-						}
-					}
 					itemEvents[i].transactions.put(t.tid, t.items.get(sequence[i]));
 				}
-			}
-		}
 	}
-
 	private void computeETF()
 	{
 		for (Transaction t : transactions)
-		{
 			for (Map.Entry<Integer, ItemInfo> e : t.items.entrySet())
-			{
 				ETF.put(e.getKey(), ETF.getOrDefault(e.getKey(), 0.0) + e.getValue().utility);
-			}
-		}
 	}
-
 	private void sortETF()
 	{
 		ArrayList<Map.Entry<Integer, Double>> list = new ArrayList<>(ETF.entrySet());
@@ -1266,7 +1268,7 @@ class AlgorithmTHUI extends Algorithm
 		ETF.clear();
 		for (Map.Entry<Integer, Double> e : list)
 			ETF.put(e.getKey(), e.getValue());
-		if (this.switches[1] && !list.isEmpty())
+		if (strategy_ETF && !list.isEmpty())
 		{
 			int idx = Math.min(this.k, list.size()) - 1;
 			double tmp = list.get(idx).getValue();
@@ -1274,7 +1276,6 @@ class AlgorithmTHUI extends Algorithm
 				delta = tmp;
 		}
 	}
-
 	private void pruneItem()
 	{
 		LinkedHashMap<Integer, Double> newTWTF = new LinkedHashMap<>();
@@ -1288,7 +1289,6 @@ class AlgorithmTHUI extends Algorithm
 		}
 		TWTF = newTWTF;
 	}
-
 	private void sortTTFE()
 	{
 		for (int i = 0; i < transactions.size(); ++i)
@@ -1296,17 +1296,15 @@ class AlgorithmTHUI extends Algorithm
 			final Transaction oldTransaction = transactions.get(i);
 			Transaction newT = new Transaction(oldTransaction.tid);
 			for (Map.Entry<Integer, Double> e : TWTF.entrySet())
-			{
 				if (oldTransaction.items.containsKey(e.getKey()))
 					newT.put(e.getKey(), oldTransaction.items.get(e.getKey()));
-			}
 			transactions.set(i, newT);
 		}
 	}
-
 	private void generateTable()
 	{
-		if (TWTF.isEmpty()) return;
+		if (TWTF.isEmpty())
+			return;
 		int size = TWTF.size();
 		int[] columns = new int[size - 1];
 		int[] index = new int[size - 1];
@@ -1315,10 +1313,16 @@ class AlgorithmTHUI extends Algorithm
 			int cnt = 0;
 			for (Map.Entry<Integer, Double> e : TWTF.entrySet())
 			{
-				if (cnt == 0) index[cnt] = e.getKey();
-				else if (cnt == size - 1) columns[cnt - 1] = e.getKey();
-				else { index[cnt] = e.getKey(); columns[cnt - 1] = e.getKey(); }
-				cnt++;
+				if (0 == cnt)
+					index[cnt] = e.getKey();
+				else if (cnt == size - 1)
+					columns[cnt - 1] = e.getKey();
+				else
+				{
+					index[cnt] = e.getKey();
+					columns[cnt - 1] = e.getKey();
+				}
+				++cnt;
 			}
 		}
 		LETF = new Table(values, index, columns, "LETF");
@@ -1333,10 +1337,11 @@ class AlgorithmTHUI extends Algorithm
 				ArrayList<Integer> subSeq = new ArrayList<>();
 				subSeq.add(p);
 				double sum = t.items.get(p).utility;
-				for (int j = i + 1; j < sequence.length; j++)
+				for (int j = i + 1; j < sequence.length; ++j)
 				{
 					int q = sequence[j];
-					if (!t.items.containsKey(q)) break;
+					if (!t.items.containsKey(q))
+						break;
 					subSeq.add(q);
 					sum += t.items.get(q).utility;
 					if (t.isSequence(subSeq))
@@ -1347,7 +1352,6 @@ class AlgorithmTHUI extends Algorithm
 			}
 		}
 	}
-
 	private void raiseThreshold_LETF_E()
 	{
 		if (LETF != null && LETF.values.length >= 1)
@@ -1372,7 +1376,6 @@ class AlgorithmTHUI extends Algorithm
 				delta = letf_e.peek();
 		}
 	}
-
 	private void raiseThreshold_LETF_LB()
 	{
 		if (LETF != null && LETF.values.length >= 1)
@@ -1401,7 +1404,6 @@ class AlgorithmTHUI extends Algorithm
 				delta = letf_lb.peek();
 		}
 	}
-
 	private void mineWithUtilityLists()
 	{
 		LinkedHashMap<Integer, UList> mapItemToUList = new LinkedHashMap<>();
@@ -1449,64 +1451,57 @@ class AlgorithmTHUI extends Algorithm
 	@Override
 	public Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount)
 	{
-		if (!this.loadDataset(inputFilePath, maximumTransactionCount))
-		{
-			return new Number[] { null, null, this.delta };
-		}
-		if (transactions.isEmpty())
-		{
-			this.logger.print("No transactions loaded, cannot run algorithm. ", LogLevel.Error);
-			return new Number[] { null, null, this.delta };
-		}
-		try
-		{
-			final long startTime = System.nanoTime();
-			this.computeTWTF(); this.checkMemory();
-			this.sortTWTF(); this.checkMemory();
-			this.computeRTF(); this.checkMemory();
-			this.computeETF(); this.checkMemory();
-			this.sortETF(); this.checkMemory();
-			this.pruneItem(); this.checkMemory();
-			this.sortTTFE(); this.checkMemory();
-			this.generateTable(); this.checkMemory();
-			if (this.switches[2]) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
-			if (this.switches[3]) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
-			this.mineWithUtilityLists(); this.checkMemory();
-			final long endTime = System.nanoTime();
-			return new Number[] { endTime - startTime, this.peakMemory, this.delta };
-		}
-		catch (Throwable e)
-		{
-			final long endTime = System.nanoTime();
-			this.logger.print("Failed to execute the THUI algorithm due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
-			return new Number[] { null, null, null };
-		}
+		if (this.loadDataset(inputFilePath, maximumTransactionCount))
+			try
+			{
+				final long startTime = System.nanoTime();
+				this.computeTWTF(); this.checkMemory();
+				this.sortTWTF(); this.checkMemory();
+				this.computeRTF(); this.checkMemory();
+				this.computeETF(); this.checkMemory();
+				this.sortETF(); this.checkMemory();
+				this.pruneItem(); this.checkMemory();
+				this.sortTTFE(); this.checkMemory();
+				this.generateTable(); this.checkMemory();
+				if (strategy_LETF_E) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
+				if (strategy_LETF_LB) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
+				this.mineWithUtilityLists(); this.checkMemory();
+				final long endTime = System.nanoTime();
+				return new Number[] { endTime - startTime, this.peakMemory, this.delta };
+			}
+			catch (Throwable e)
+			{
+				this.logger.print("Algorithm" + this.algorithmName + ": Failed to execute the " + this.algorithmName + " algorithm due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
+			}
+		return new Number[] { null, null, null };
 	}
+	@Override
 	public ArrayList<ArrayList<Integer>> getTopKPatterns()
 	{
 		if (null == this.finalResults || this.finalResults.isEmpty())
 			return new ArrayList<ArrayList<Integer>>();
 		else
 		{
-			ArrayList<HTFE> sorted = new ArrayList<>(this.finalResults);
-			sorted.sort((a, b) -> Double.compare(b.eetf, a.eetf));
-			ArrayList<ArrayList<Integer>> keys = new ArrayList<>();
-			for (HTFE htfe : sorted)
-				keys.add(new ArrayList<>(htfe.sequence));
-			return keys;
+			ArrayList<HTFE> results = new ArrayList<>(this.finalResults);
+			results.sort((a, b) -> Double.compare(b.eetf, a.eetf));
+			ArrayList<ArrayList<Integer>> patterns = new ArrayList<>();
+			for (HTFE result : results)
+				patterns.add(new ArrayList<>(result.sequence));
+			return patterns;
 		}
 	}
+	@Override
 	public ArrayList<Double> getTopKValues()
 	{
-		if (null == finalResults || finalResults.isEmpty())
+		if (null == this.finalResults || this.finalResults.isEmpty())
 			return new ArrayList<Double>();
 		else
 		{
-			ArrayList<HTFE> sorted = new ArrayList<>(finalResults);
-			sorted.sort((a, b) -> Double.compare(b.eetf, a.eetf));
+			ArrayList<HTFE> results = new ArrayList<>(this.finalResults);
+			results.sort((a, b) -> Double.compare(b.eetf, a.eetf));
 			ArrayList<Double> values = new ArrayList<>();
-			for (HTFE htfe : sorted)
-				values.add(htfe.eetf);
+			for (HTFE result : results)
+				values.add(result.eetf);
 			return values;
 		}
 	}
@@ -1533,24 +1528,24 @@ class AlgorithmTHUFI extends Algorithm
 	
 	private PriorityQueue<PatternTHUFI> finalResults = new PriorityQueue<>();
 	
-	public AlgorithmTHUFI(final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	public AlgorithmTHUFI(final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
 	{
-		super(alpha, beta, delta, k, logger);
+		super("THUFI", _alpha, _beta, _delta, _k, _logger);
 	}
 	@Override
 	public Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount)
 	{
 		final long startTime = System.nanoTime();
-
+		
 		/* Utility */
-		AlgorithmTHUI utilityAlgorithm = new AlgorithmTHUI(this.alpha, this.beta, this.delta, this.k, this.logger);
+		final AlgorithmTHUI utilityAlgorithm = new AlgorithmTHUI(this.alpha, this.beta, this.delta, this.k, this.logger);
 		utilityAlgorithm.setColumnIndex(1);
 		final Number[] utilityMetrics = utilityAlgorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
 		final ArrayList<ArrayList<Integer>> utilityTopKPatterns = utilityAlgorithm.getTopKPatterns();
 		final ArrayList<Double> utilityTopKValues = utilityAlgorithm.getTopKValues();
 		
 		/* Frequency */
-		AlgorithmTHUI frequencyAlgorithm = new AlgorithmTHUI(this.alpha, this.beta, this.delta, this.k, this.logger);
+		final AlgorithmTHUI frequencyAlgorithm = new AlgorithmTHUI(this.alpha, this.beta, this.delta, this.k, this.logger);
 		frequencyAlgorithm.setColumnIndex(2);
 		final Number[] frequencyMetrics = frequencyAlgorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
 		final ArrayList<ArrayList<Integer>> frequencyTopKPatterns = frequencyAlgorithm.getTopKPatterns();
@@ -1604,33 +1599,46 @@ class AlgorithmTHUFI extends Algorithm
 			this.delta = (double)utilityMetrics[2];
 		else if (frequencyMetrics[2] != null && (double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
 			this.delta = (double)frequencyMetrics[2];
+		
 		return new Number[] { endTime - startTime, peakMemory, this.delta };
 	}
+	@Override
 	public ArrayList<ArrayList<Integer>> getTopKPatterns()
 	{
-		ArrayList<PatternTHUFI> sorted = new ArrayList<>(finalResults);
-		sorted.sort((a, b) -> Double.compare(b.combinedUtility, a.combinedUtility));
-		ArrayList<ArrayList<Integer>> keys = new ArrayList<>();
-		for (PatternTHUFI p : sorted)
-			keys.add(new ArrayList<>(p.items));
-		return keys;
+		if (null == this.finalResults || this.finalResults.isEmpty())
+			return new ArrayList<ArrayList<Integer>>();
+		else
+		{
+			ArrayList<PatternTHUFI> results = new ArrayList<>(this.finalResults);
+			results.sort((a, b) -> Double.compare(b.combinedUtility, a.combinedUtility));
+			ArrayList<ArrayList<Integer>> patterns = new ArrayList<>();
+			for (PatternTHUFI result : results)
+				patterns.add(new ArrayList<>(result.items));
+			return patterns;
+		}
 	}
+	@Override
 	public ArrayList<Double> getTopKValues()
 	{
-		ArrayList<PatternTHUFI> sorted = new ArrayList<>(finalResults);
-		sorted.sort((a, b) -> Double.compare(b.combinedUtility, a.combinedUtility));
-		ArrayList<Double> values = new ArrayList<>();
-		for (PatternTHUFI p : sorted)
-			values.add(p.combinedUtility);
-		return values;
+		if (null == this.finalResults || this.finalResults.isEmpty())
+			return new ArrayList<Double>();
+		else
+		{
+			ArrayList<PatternTHUFI> results = new ArrayList<>(this.finalResults);
+			results.sort((a, b) -> Double.compare(b.combinedUtility, a.combinedUtility));
+			ArrayList<Double> values = new ArrayList<>();
+			for (PatternTHUFI result : results)
+				values.add(result.combinedUtility);
+			return values;
+		}
 	}
 }
 
 class AlgorithmTTFE extends Algorithm
 {
-	private class TF implements Serializable
+	class TF implements Serializable
 	{
-		double threat, frequency, tf, rtf;
+		double threat = 0.0, frequency = 0.0, tf = 0.0, rtf = 0.0;
 		
 		TF(double threat, double frequency)
 		{
@@ -1639,21 +1647,21 @@ class AlgorithmTTFE extends Algorithm
 			this.tf = alpha * threat + beta * frequency;
 		}
 	}
-	private static class Transaction implements Serializable
+	static class Transaction implements Serializable
 	{
 		int tid = 0;
 		LinkedHashMap<Integer, TF> events = new LinkedHashMap<>();
-		Double ttf = null;
+		double ttf = 0.0;
 		
-		public Transaction()
+		Transaction()
 		{
 			
 		}
-		public Transaction(int tid)
+		Transaction(int tid)
 		{
 			this.setTid(tid);
 		}
-		public void setTid(int tid)
+		void setTid(int tid)
 		{
 			this.tid = tid;
 		}
@@ -1704,10 +1712,13 @@ class AlgorithmTTFE extends Algorithm
 	}
 	private static class Event implements Serializable
 	{
-		int event;
+		int event = 0;
 		LinkedHashMap<Integer, TF> transactions = new LinkedHashMap<>();
 		
-		Event(int event) { this.event = event; }
+		Event(int event)
+		{
+			this.event = event;
+		}
 	}
 	private static class Table implements Serializable
 	{
@@ -1722,7 +1733,6 @@ class AlgorithmTTFE extends Algorithm
 			this.sequence[0] = index[0];
 			for (int i = 0; i < columns.length; ++i) this.sequence[i+1] = columns[i];
 		}
-
 		boolean addValueByName(int indexName, int columnName, double value)
 		{
 			int ci = -1, ii = -1;
@@ -1732,16 +1742,22 @@ class AlgorithmTTFE extends Algorithm
 			values[ii][ci] += value;
 			return true;
 		}
-
 		ArrayList<Integer> getMiddleElements(int p, int q, boolean inclusive)
 		{
 			ArrayList<Integer> arr = new ArrayList<>();
 			boolean add = false;
 			for (int elem : sequence)
 			{
-				if (elem == p) add = true;
-				else if (elem == q) { if (inclusive) arr.add(q); break; }
-				else if (add) arr.add(elem);
+				if (elem == p)
+					add = true;
+				else if (elem == q)
+				{
+					if (inclusive)
+						arr.add(q);
+					break;
+				}
+				else if (add)
+					arr.add(elem);
 			}
 			if (inclusive) arr.add(0, p);
 			return arr;
@@ -1749,24 +1765,28 @@ class AlgorithmTTFE extends Algorithm
 	}
 	private static class UElement implements Serializable
 	{
-		final int tid;
-		double iutils;
-		double rutils;
-
+		int tid = 0;
+		double iutils = 0.0;
+		double rutils = 0.0;
+		
 		UElement(int tid, double iutils, double rutils)
 		{
-			this.tid = tid; this.iutils = iutils; this.rutils = rutils;
+			this.tid = tid;
+			this.iutils = iutils;
+			this.rutils = rutils;
 		}
 	}
-	protected static class UList implements Serializable
+	static class UList implements Serializable
 	{
-		Integer item;
+		Integer item = null;
 		double sumIutils = 0;
 		double sumRutils = 0;
 		ArrayList<UElement> elements = new ArrayList<>();
-
-		UList(Integer item) { this.item = item; }
-
+		
+		UList(Integer item)
+		{
+			this.item = item;
+		}
 		void addElement(UElement e)
 		{
 			sumIutils += e.iutils;
@@ -1774,23 +1794,25 @@ class AlgorithmTTFE extends Algorithm
 			elements.add(e);
 		}
 	}
-	protected static class HTFE implements Comparable<HTFE>, Serializable
+	static class HTFE implements Comparable<HTFE>, Serializable
 	{
 		ArrayList<Integer> sequence;
 		double eetf;
-
+		
 		HTFE(ArrayList<Integer> seq, double eetf)
 		{
 			this.sequence = new ArrayList<>(seq);
 			this.eetf = eetf;
 		}
-
 		@Override
-		public int compareTo(HTFE o) { return Double.compare(this.eetf, o.eetf); }
+		public int compareTo(HTFE o)
+		{
+			return Double.compare(this.eetf, o.eetf);
+		}
 	}
 	
-	protected boolean[] switches = { false, true, true, false, true, true };
-	private final ArrayList<Transaction> transactions = new ArrayList<>();
+	boolean strategyPruning = true, strategy_ETF = true, strategy_LETF_E = true, strategy_LETF_LB = true;
+	ArrayList<Transaction> transactions = new ArrayList<>();
 	private LinkedHashMap<Integer, Double> TWTF = new LinkedHashMap<>();
 	private int[] sequence = null;
 	private Event[] events = null;
@@ -1798,17 +1820,21 @@ class AlgorithmTTFE extends Algorithm
 	private Table LETF = null;
 	private final PriorityQueue<Double> letf_e = new PriorityQueue<>();
 	private final PriorityQueue<Double> letf_lb = new PriorityQueue<>();
-	protected final PriorityQueue<HTFE> finalResults = new PriorityQueue<>();
+	final PriorityQueue<HTFE> finalResults = new PriorityQueue<>();
 	private int candidateCount = 0;
 	private final int BUFFERS_SIZE = 200;
 	
-	public AlgorithmTTFE(final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	public AlgorithmTTFE(final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
 	{
-		super(alpha, beta, delta, k, logger);
+		super("TTFE", _alpha, _beta, _delta, _k, _logger);
+	}
+	AlgorithmTTFE(final String _algorithmName, final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
+	{
+		super(_algorithmName, _alpha, _beta, _delta, _k, _logger);
 	}
 	
 	/* Child procedures */
-	protected void savePattern(int[] prefix, final int length, UList X)
+	void savePattern(int[] prefix, final int length, UList X)
 	{
 		ArrayList<Integer> seq = new ArrayList<>();
 		for (int i = 0; i < length; ++i)
@@ -1816,9 +1842,9 @@ class AlgorithmTTFE extends Algorithm
 		seq.add(X.item);
 		HTFE htfe = new HTFE(seq, X.sumIutils);
 		finalResults.offer(htfe);
-		while (finalResults.size() > this.k)
-			finalResults.poll();
-		if (finalResults.size() >= this.k)
+		while (this.finalResults.size() > this.k)
+			this.finalResults.poll();
+		if (this.strategyPruning && this.finalResults.size() >= this.k)
 			this.delta = this.finalResults.peek().eetf;
 	}
 	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
@@ -1838,7 +1864,7 @@ class AlgorithmTTFE extends Algorithm
 				for (int j = i + 1; j < ULs.size(); ++j)
 				{
 					UList Y = ULs.get(j);
-					candidateCount++;
+					++candidateCount;
 					UList ex = construct(pUL, X, Y);
 					if (ex != null)
 						exULs.add(ex);
@@ -1894,7 +1920,7 @@ class AlgorithmTTFE extends Algorithm
 	}
 	
 	/* Main procedures */
-	private boolean loadDataset(final String inputFilePath, final int maximumTransactionCount)
+	boolean loadDataset(final String inputFilePath, final int maximumTransactionCount)
 	{
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(inputFilePath), StandardCharsets.UTF_8)))
 		{
@@ -1944,13 +1970,18 @@ class AlgorithmTTFE extends Algorithm
 				}
 			}
 			if (colonWarningFlag)
-				this.logger.print("One or more effective lines contain fewer than 3 colons, which have been skipped. ", LogLevel.Warning);
+				this.logger.print(
+					"Algorithm" + this.algorithmName + ": One or more effective lines contain fewer than 3 colons, which have been skipped. ", LogLevel.Warning
+				);
 			if (countWarningFlag)
-				this.logger.print("One or more effective lines contain inconsistent counts of events, threats, and frequencies, which have been skipped. ", LogLevel.Warning);
+				this.logger.print(
+					"Algorithm" + this.algorithmName + ": One or more effective lines contain inconsistent counts of items and utilities, which have been skipped. ", LogLevel.Warning
+				);
 			if (parsingWarningFlag)
-				this.logger.print("One or more effective lines contain failures in parsing numbers, which have been skipped. ", LogLevel.Warning);
-			return true;
-			
+				this.logger.print("Algorithm" + this.algorithmName + ": One or more effective lines contain failures in parsing numbers, which have been skipped. ", LogLevel.Warning);
+			if (this.transactions.isEmpty())
+				this.logger.print("Algorithm" + this.algorithmName + ": No effective transactions were loaded from " + Formatter.escapeString(inputFilePath) + ". ", LogLevel.Warning);
+			return true;			
 		}
 		catch (Throwable e)
 		{
@@ -1983,40 +2014,29 @@ class AlgorithmTTFE extends Algorithm
 	private void computeRTF()
 	{
 		for (Transaction t : transactions)
-		{
 			for (int i = 0; i < sequence.length; ++i)
-			{
 				if (t.events.containsKey(sequence[i]))
 				{
 					for (int j = i + 1; j < sequence.length; j++)
-					{
 						if (t.events.containsKey(sequence[j]))
-						{
 							t.events.get(sequence[i]).rtf += t.events.get(sequence[j]).tf;
-						}
-					}
 					events[i].transactions.put(t.tid, t.events.get(sequence[i]));
 				}
-			}
-		}
 	}
 	private void computeETF()
 	{
 		for (Transaction t : transactions)
-		{
 			for (Map.Entry<Integer, TF> e : t.events.entrySet())
-			{
 				ETF.put(e.getKey(), ETF.getOrDefault(e.getKey(), 0.0) + e.getValue().tf);
-			}
-		}
 	}
 	private void sortETF()
 	{
 		ArrayList<Map.Entry<Integer, Double>> list = new ArrayList<>(ETF.entrySet());
 		list.sort((a, b) -> b.getValue().compareTo(a.getValue()));
 		ETF.clear();
-		for (Map.Entry<Integer, Double> e : list) ETF.put(e.getKey(), e.getValue());
-		if (this.switches[1] && !list.isEmpty())
+		for (Map.Entry<Integer, Double> e : list)
+			ETF.put(e.getKey(), e.getValue());
+		if (strategy_ETF && !list.isEmpty())
 		{
 			int idx = Math.min(this.k, list.size()) - 1;
 			double tmp = list.get(idx).getValue();
@@ -2044,16 +2064,15 @@ class AlgorithmTTFE extends Algorithm
 			final Transaction oldTransaction = transactions.get(i);
 			Transaction newT = new Transaction(oldTransaction.tid);
 			for (Map.Entry<Integer, Double> e : TWTF.entrySet())
-			{
 				if (oldTransaction.events.containsKey(e.getKey()))
 					newT.put(e.getKey(), oldTransaction.events.get(e.getKey()));
-			}
 			transactions.set(i, newT);
 		}
 	}
 	private void generateTable()
 	{
-		if (TWTF.isEmpty()) return;
+		if (TWTF.isEmpty())
+			return;
 		int size = TWTF.size();
 		int[] columns = new int[size - 1];
 		int[] index = new int[size - 1];
@@ -2079,7 +2098,7 @@ class AlgorithmTTFE extends Algorithm
 				ArrayList<Integer> subSeq = new ArrayList<>();
 				subSeq.add(p);
 				double sum = t.events.get(p).tf;
-				for (int j = i + 1; j < sequence.length; j++)
+				for (int j = i + 1; j < sequence.length; ++j)
 				{
 					int q = sequence[j];
 					if (!t.events.containsKey(q)) break;
@@ -2122,7 +2141,6 @@ class AlgorithmTTFE extends Algorithm
 		if (LETF != null && LETF.values.length >= 1)
 		{
 			for (int i = 0; i < LETF.values.length; ++i)
-			{
 				for (int j = 0; j < LETF.values[i].length; ++j)
 				{
 					int p = LETF.index[i], q = LETF.columns[j];
@@ -2140,7 +2158,6 @@ class AlgorithmTTFE extends Algorithm
 							break;
 					}
 				}
-			}
 			if (letf_lb.size() >= this.k && letf_lb.peek() > delta)
 				delta = letf_lb.peek();
 		}
@@ -2149,24 +2166,19 @@ class AlgorithmTTFE extends Algorithm
 	{
 		LinkedHashMap<Integer, UList> mapItemToUList = new LinkedHashMap<>();
 		for (int item : sequence)
-		{
 			if (TWTF.containsKey(item) && TWTF.get(item) >= delta)
 			{
 				UList ul = new UList(item);
 				mapItemToUList.put(item, ul);
 			}
-		}
 		for (Transaction trans : transactions)
 		{
 			ArrayList<Integer> itemsInTrans = new ArrayList<>();
 			for (int item : sequence)
-			{
 				if (trans.events.containsKey(item))
-				{
 					itemsInTrans.add(item);
-				}
-			}
-			if (itemsInTrans.isEmpty()) continue;
+			if (itemsInTrans.isEmpty())
+				continue;
 			double remaining = 0;
 			for (int i = itemsInTrans.size() - 1; i >= 0; --i)
 			{
@@ -2192,58 +2204,70 @@ class AlgorithmTTFE extends Algorithm
 	@Override
 	public Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount)
 	{
-		if (!this.loadDataset(inputFilePath, maximumTransactionCount))
+		if (this.loadDataset(inputFilePath, maximumTransactionCount))
+			try
+			{
+				final long startTime = System.nanoTime();
+				this.computeTWTF(); this.checkMemory();
+				this.sortTWTF(); this.checkMemory();
+				this.computeRTF(); this.checkMemory();
+				this.computeETF(); this.checkMemory();
+				this.sortETF(); this.checkMemory();
+				this.pruneItem(); this.checkMemory();
+				this.sortTTFE(); this.checkMemory();
+				this.generateTable(); this.checkMemory();
+				if (strategy_LETF_E) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
+				if (strategy_LETF_LB) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
+				this.mineWithEnumerationTree(); this.checkMemory();
+				final long endTime = System.nanoTime();
+				return new Number[] { endTime - startTime, this.peakMemory, this.delta };
+			}
+			catch (Throwable e)
+			{
+				this.logger.print("Algorithm" + this.algorithmName + ": Failed to execute the " + this.algorithmName + " algorithm due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
+			}
+		return new Number[] { null, null, null };
+	}
+	@Override
+	public ArrayList<ArrayList<Integer>> getTopKPatterns()
+	{
+		if (null == this.finalResults || this.finalResults.isEmpty())
+			return new ArrayList<ArrayList<Integer>>();
+		else
 		{
-			return new Number[] { null, null, this.delta };
+			ArrayList<HTFE> results = new ArrayList<>(this.finalResults);
+			results.sort((a, b) -> Double.compare(b.eetf, a.eetf));
+			ArrayList<ArrayList<Integer>> patterns = new ArrayList<>();
+			for (final HTFE result : results)
+				patterns.add(new ArrayList<>(result.sequence));
+			return patterns;
 		}
-		if (transactions.isEmpty())
+	}
+	@Override
+	public ArrayList<Double> getTopKValues()
+	{
+		if (null == this.finalResults || this.finalResults.isEmpty())
+			return new ArrayList<Double>();
+		else
 		{
-			this.logger.print("No transactions loaded, cannot run algorithm. ", LogLevel.Error);
-			return new Number[] { null, null, this.delta };
-		}
-		try
-		{
-			final long startTime = System.nanoTime();
-			this.computeTWTF(); this.checkMemory();
-			this.sortTWTF(); this.checkMemory();
-			this.computeRTF(); this.checkMemory();
-			this.computeETF(); this.checkMemory();
-			this.sortETF(); this.checkMemory();
-			this.pruneItem(); this.checkMemory();
-			this.sortTTFE(); this.checkMemory();
-			this.generateTable(); this.checkMemory();
-			if (this.switches[2]) { this.raiseThreshold_LETF_E(); this.checkMemory(); }
-			if (this.switches[3]) { this.raiseThreshold_LETF_LB(); this.checkMemory(); }
-			this.mineWithEnumerationTree(); this.checkMemory();
-			final long endTime = System.nanoTime();
-			return new Number[] { endTime - startTime, this.peakMemory, this.delta };
-		}
-		catch (Exception e)
-		{
-			this.logger.print("Failed to execute the TTFE algorithm due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
-			return new Number[] { null, null, null };
+			ArrayList<HTFE> results = new ArrayList<>(this.finalResults);
+			results.sort((a, b) -> Double.compare(b.eetf, a.eetf));
+			ArrayList<Double> values = new ArrayList<>();
+			for (final HTFE result : results)
+				values.add(result.eetf);
+			return values;
 		}
 	}
 }
 
 class AlgorithmGUMM extends AlgorithmTTFE
 {
-	public AlgorithmGUMM(final double alpha, final double beta, final double delta, final int k, final Logger logger)
+	public AlgorithmGUMM(final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
 	{
-		super(alpha, beta, delta, k, logger);
-		this.switches = new boolean[] { false, false, false, false, false, false };
-	}
-	@Override
-	protected void savePattern(int[] prefix, int length, UList X)
-	{
-		ArrayList<Integer> seq = new ArrayList<>();
-		for (int i = 0; i < length; ++i)
-			seq.add(prefix[i]);
-		seq.add(X.item);
-		HTFE htfe = new HTFE(seq, X.sumIutils);
-		finalResults.offer(htfe);
-		while (finalResults.size() > this.k)
-			finalResults.poll();
+		super("GUMM", _alpha, _beta, _delta, _k, _logger);
+		this.strategy_ETF = false;
+		this.strategy_LETF_E = false;
+		this.strategy_LETF_LB = false;
 	}
 }
 
@@ -2600,10 +2624,6 @@ public class TopKMining
 								results[outerIndex][innerIndex++] = delta; results[outerIndex][innerIndex++] = k;
 								results[outerIndex][innerIndex++] = runCount;
 								parameters[3] = k;
-								logger.print(Formatter.array2String(
-									parameters, "``algorithmName = \"" + algorithmName + "\"`` | ``Parameters = (", ", ", ")``"
-								), LogLevel.Debug);
-								System.gc();
 								Algorithm algorithm = algorithmFactory.apply(parameters);
 								Number[] result = algorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
 								if (null == result || result.length != metricLength)
