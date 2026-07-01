@@ -141,7 +141,7 @@ jobs:
           else
             testAccidents="false"
             testChess="true"
-            testConnect="false"
+            testConnect="true"
             testKosarak="false"
             testMushroom="true"
             testPumsb="false"
@@ -192,7 +192,31 @@ jobs:
           leadingSigns="${integerNumberString%%[!+-]*}"
           minusCount=$(echo -n "${leadingSigns}" | tr -cd '-' | wc -c)
           integerNumberString="${integerNumberString#$leadingSigns}"
-          if [[ "${integerNumberString:0:1}" =~ [0-9] ]];
+          integerNumberString="$(echo "${integerNumberString}" | sed 's/^0*//')"
+          radix=0
+          case "${integerNumberString:0:1}" in
+            'b')
+              radix=2
+              integerNumberString="${integerNumberString:1}"
+              ;;
+            'q')
+              radix=4
+              integerNumberString="${integerNumberString:1}"
+              ;;
+            'o')
+              radix=8
+              integerNumberString="${integerNumberString:1}"
+              ;;
+            'd')
+              radix=10
+              integerNumberString="${integerNumberString:1}"
+              ;;
+            'x')
+              radix=16
+              integerNumberString="${integerNumberString:1}"
+              ;;
+          esac
+          if [[ 0 -eq ${radix} ]];
           then
             case "${integerNumberString: -1}" in
               'b')
@@ -219,36 +243,10 @@ jobs:
                 radix=10
                 ;;
             esac
-          else
-            case "${integerNumberString:0:1}" in
-              'b')
-                radix=2
-                integerNumberString="${integerNumberString:1}"
-                ;;
-              'q')
-                radix=4
-                integerNumberString="${integerNumberString:1}"
-                ;;
-              'o')
-                radix=8
-                integerNumberString="${integerNumberString:1}"
-                ;;
-              'd')
-                radix=10
-                integerNumberString="${integerNumberString:1}"
-                ;;
-              'x')
-                radix=16
-                integerNumberString="${integerNumberString:1}"
-                ;;
-              *)
-                radix=10
-                ;;
-            esac
           fi
           integerNumberString="$(echo "${integerNumberString}" | sed 's/^0*//')"
           integerNumberString="${integerNumberString%%.*}"
-          runCount=1
+          runCount=0
           { runCount=$((${radix}#$integerNumberString)); } 2>/dev/null
           if (( minusCount % 2 == 1 ));
           then
@@ -268,10 +266,12 @@ jobs:
           echo "Java version: ${javaVersion}"
           echo "Run count: ${runCountString} (${runCount})"
           echo "Time string: ${timeString}"
+          echo "Output format: ${outputFormat}"
           echo "Output file path: ${outputFilePath}"
           echo "javaVersion=${javaVersion}" >> "${GITHUB_OUTPUT}"
           echo "runCount=${runCount}" >> "${GITHUB_OUTPUT}"
           echo "timeString=${timeString}" >> "${GITHUB_OUTPUT}"
+          echo "outputFormat=${outputFormat}" >> "${GITHUB_OUTPUT}"
           echo "outputFilePath=${outputFilePath}" >> "${GITHUB_OUTPUT}"
         env:
           javaVersion: ${{ github.event.inputs.javaVersion || 25 }}
@@ -307,7 +307,7 @@ jobs:
           if-no-files-found: error
   
   runPython:
-    if: ${{ github.event.inputs.outputFormat || '.csv' }} == '.csv'
+    if: ${{ needs.runJava.outputs.outputFormat == '.csv' }}
     needs: runJava
     runs-on: ubuntu-latest
     steps:
