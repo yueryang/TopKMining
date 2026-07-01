@@ -9,6 +9,8 @@ import java.io.OutputStreamWriter;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -382,7 +384,7 @@ class Parser
 				}
 			else
 			{
-				int frontIndex = 0, radix = 0, endIndex = realNumberString.length() - 1, integerValue = 0;
+				int frontIndex = 0, radix = 0, endIndex = realNumberString.length() - 1;
 				boolean isNegative = false, isRegular = true;
 				for (boolean breakFlag = false; frontIndex < realNumberString.length(); ++frontIndex)
 				{
@@ -500,7 +502,8 @@ class Parser
 					if (0 == radix)
 						radix = 10;
 					boolean containingMultipleRadixPoints = false, isDecimal = false, isIllegalDigitDetected = false, isOverflowed = false;
-					double decimalValue = 0;
+					double decimalValue = 0.0;
+					int integerValue = 0;
 					for (int index = frontIndex; index <= endIndex; ++index)
 						if ('.' == realNumberString.charAt(index))
 						{
@@ -1588,17 +1591,17 @@ class AlgorithmTHUFI extends Algorithm
 		/* Metrics */
 		Long peakMemory = null;
 		if (utilityMetrics[1] != null && frequencyMetrics[1] != null)
-			peakMemory = Math.max((Long)utilityMetrics[1], (Long)frequencyMetrics[1]);
+			peakMemory = (Long)utilityMetrics[1] + (Long)frequencyMetrics[1];
 		else if (utilityMetrics[1] != null)
 			peakMemory = (Long)utilityMetrics[1];
 		else if (frequencyMetrics[1] != null)
 			peakMemory = (Long)frequencyMetrics[1];
 		if (utilityMetrics[2] != null && (double)utilityMetrics[2] != Double.NEGATIVE_INFINITY && frequencyMetrics[2] != null && (double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
-			this.delta = this.alpha * (double)utilityMetrics[2] + this.beta * (double)frequencyMetrics[2];
+			this.delta = Math.min((Double)utilityMetrics[2], (Double)frequencyMetrics[2]);
 		else if (utilityMetrics[2] != null && (double)utilityMetrics[2] != Double.NEGATIVE_INFINITY)
-			this.delta = (double)utilityMetrics[2];
+			this.delta = (Double)utilityMetrics[2];
 		else if (frequencyMetrics[2] != null && (double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
-			this.delta = (double)frequencyMetrics[2];
+			this.delta = (Double)frequencyMetrics[2];
 		
 		return new Number[] { endTime - startTime, peakMemory, this.delta };
 	}
@@ -2306,6 +2309,19 @@ class Saver
 		System.out.println();
 		return true;
 	}
+	static boolean handleDirectory(final Path directory)
+	{
+		try
+		{
+			if (Files.exists(directory))
+				return Files.isDirectory(directory);
+			else
+				Files.createDirectories(directory);
+				return Files.isDirectory(directory);
+		}
+		catch (Throwable e) {}
+		return false;
+	}
 	private boolean saveToCSV(final Object[][] results, final int leftClosing, final int rightOpening)
 	{
 		try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(this.outputFilePath), StandardCharsets.UTF_8)))
@@ -2522,23 +2538,41 @@ class Saver
 			return this.displayOnConsole(results, leftClosing, rightOpening);
 		else
 		{
-			final int dotIndex = this.outputFilePath.lastIndexOf('.');
-			final String documentType = dotIndex >= 1 ? this.outputFilePath.substring(dotIndex + 1).toUpperCase() : "";
-			switch (documentType)
+			final Path parentDirectory = Paths.get(this.outputFilePath).getParent();
+			if (null == parentDirectory || handleDirectory(parentDirectory))
 			{
-			case "CSV":
-				return this.saveToCSV(results, leftClosing, rightOpening);
-			case "HTM":
-			case "HTML":
-				return this.saveToHTML(results, leftClosing, rightOpening);
-			case "JSON":
-				return this.saveToJSON(results, leftClosing, rightOpening);
-			case "TEX":
-				return this.saveToTEX(results, leftClosing, rightOpening);
-			case "XML":
-				return this.saveToXML(results, leftClosing, rightOpening);
-			default:
-				return this.saveToTSV(results, leftClosing, rightOpening);
+				this.logger.print(
+					"Saver: Successfully prepared the parent directory " + Formatter.escapeString(parentDirectory) + ". ", 
+					LogLevel.Debug
+				);
+				final int dotIndex = this.outputFilePath.lastIndexOf('.');
+				final String documentType = dotIndex >= 1 ? this.outputFilePath.substring(dotIndex + 1).toUpperCase() : "";
+				switch (documentType)
+				{
+				case "CSV":
+					return this.saveToCSV(results, leftClosing, rightOpening);
+				case "HTM":
+				case "HTML":
+					return this.saveToHTML(results, leftClosing, rightOpening);
+				case "JSON":
+					return this.saveToJSON(results, leftClosing, rightOpening);
+				case "TEX":
+					return this.saveToTEX(results, leftClosing, rightOpening);
+				case "XML":
+					return this.saveToXML(results, leftClosing, rightOpening);
+				default:
+					return this.saveToTSV(results, leftClosing, rightOpening);
+				}
+			}
+			else
+			{
+				this.logger.print(
+					"Saver: Failed to save the results[" + leftClosing + ":" + rightOpening + "] to " + this.escapedOutputFilePath
+					+ " due to failures of preparing its parent directory " + Formatter.escapeString(parentDirectory) + ". ", 
+					LogLevel.Error
+				);
+				this.displayOnConsole(results, leftClosing, rightOpening);
+				return false;
 			}
 		}
 	}
@@ -2549,7 +2583,7 @@ public class TopKMining
 	final static int EXIT_SUCCESS = 0;
 	final static int EXIT_FAILURE = 1;
 	final static int EOF = (-1);
-	final static double EPSILON = 0.0001;
+	final static double EPSILON = 0.00001;
 	
 	private static boolean checkComplexity(final Number number)
 	{

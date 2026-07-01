@@ -1,20 +1,22 @@
-name: Run Java
+name: Run
 
 on:
   pull_request:
     branches:
       - main
     paths:
-      - '.github/workflows/runJava.yml'
-      - 'TopKMining.java'
+      - '.github/workflows/run.yml'
       - 'Datasets/*.txt'
+      - 'Draw.py'
+      - 'TopKMining.java'
   push:
     branches:
       - main
     paths:
-      - '.github/workflows/runJava.yml'
-      - 'TopKMining.java'
+      - '.github/workflows/run.yml'
       - 'Datasets/*.txt'
+      - 'Draw.py'
+      - 'TopKMining.java'
   workflow_dispatch:
     inputs:
       testAccidents:
@@ -63,7 +65,7 @@ on:
         default: true
         type: boolean
       javaVersion:
-        description: 'Java Version'
+        description: 'Java version'
         required: true
         default: 25
         type: choice
@@ -87,7 +89,7 @@ on:
       outputFormat:
         description: 'Output format'
         required: true
-        default: '.tsv'
+        default: '.csv'
         type: choice
         options:
           - '.csv'
@@ -102,6 +104,17 @@ on:
         required: true
         default: '1'
         type: string
+      pythonVersion:
+        description: 'Python version'
+        required: true
+        default: '3.x'
+        type: choice
+        options:
+          - '3.x'
+          - '3.12'
+          - '3.13'
+          - '3.14'
+          - '3.15'
 
 jobs:
   prepare:
@@ -173,95 +186,107 @@ jobs:
           cd "${{ github.workspace }}"
           
           # Run count #
-          strippedRunCountString="$(echo -n "${runCountString}" | tr -d '\t _')"
-          leadingSigns="${strippedRunCountString%%[!+-]*}"
+          integerNumberString="$(echo -n "${runCountString}" | tr -cd '0-9A-Za-z+.-' | tr 'A-Z' 'a-z')"
+          leadingSigns="${integerNumberString%%[!+-]*}"
           minusCount=$(echo -n "${leadingSigns}" | tr -cd '-' | wc -c)
-          strippedRunCountString="${strippedRunCountString#$leadingSigns}"
-          if [[ "${strippedRunCountString:0:1}" =~ [0-9] ]];
+          integerNumberString="${integerNumberString#$leadingSigns}"
+          if [[ "${integerNumberString:0:1}" =~ [0-9] ]];
           then
-            case "${strippedRunCountString: -1}" in
-              'B'|'b')
+            case "${integerNumberString: -1}" in
+              'b')
                 radix=2
-                strippedRunCountString="${strippedRunCountString:0:-1}"
+                integerNumberString="${integerNumberString:0:-1}"
                 ;;
-              'Q'|'q')
+              'q')
                 radix=4
-                strippedRunCountString="${strippedRunCountString:0:-1}"
+                integerNumberString="${integerNumberString:0:-1}"
                 ;;
-              'O'|'o')
+              'o')
                 radix=8
-                strippedRunCountString="${strippedRunCountString:0:-1}"
+                integerNumberString="${integerNumberString:0:-1}"
                 ;;
-              'D'|'d')
+              'd')
                 radix=10
-                strippedRunCountString="${strippedRunCountString:0:-1}"
+                integerNumberString="${integerNumberString:0:-1}"
                 ;;
-              'X'|'x')
+              'x')
                 radix=16
-                strippedRunCountString="${strippedRunCountString:0:-1}"
+                integerNumberString="${integerNumberString:0:-1}"
                 ;;
               *)
                 radix=10
                 ;;
             esac
           else
-            case "${strippedRunCountString:0:1}" in
-              'B'|'b')
+            case "${integerNumberString:0:1}" in
+              'b')
                 radix=2
-                strippedRunCountString="${strippedRunCountString:1}"
+                integerNumberString="${integerNumberString:1}"
                 ;;
-              'Q'|'q')
+              'q')
                 radix=4
-                strippedRunCountString="${strippedRunCountString:1}"
+                integerNumberString="${integerNumberString:1}"
                 ;;
-              'O'|'o')
+              'o')
                 radix=8
-                strippedRunCountString="${strippedRunCountString:1}"
+                integerNumberString="${integerNumberString:1}"
                 ;;
-              'D'|'d')
+              'd')
                 radix=10
-                strippedRunCountString="${strippedRunCountString:1}"
+                integerNumberString="${integerNumberString:1}"
                 ;;
-              'X'|'x')
+              'x')
                 radix=16
-                strippedRunCountString="${strippedRunCountString:1}"
+                integerNumberString="${integerNumberString:1}"
                 ;;
               *)
                 radix=10
                 ;;
             esac
           fi
-          strippedRunCountString="$(echo "${strippedRunCountString}" | sed 's/^0*//')"
-          strippedRunCountString="${strippedRunCountString%%.*}"
-          runCount=10
-          { runCount=$((${radix}#$strippedRunCountString)); } 2>/dev/null
+          integerNumberString="$(echo "${integerNumberString}" | sed 's/^0*//')"
+          integerNumberString="${integerNumberString%%.*}"
+          runCount=1
+          { runCount=$((${radix}#$integerNumberString)); } 2>/dev/null
           if (( minusCount % 2 == 1 ));
           then
             runCount=$(( -runCount ))
           fi
           if [[ ${runCount} -lt 1 ]];
           then
-            runCount=10
+            runCount=1
           fi
           
+          directoryPath="Outputs"
           mainFileName="$(basename "${{ matrix.dataset }}" | sed "s/\.[^.]*\$//g")"
           timeString="HKT$(date '+%Y%m%d%H%M%S')"
-          outputFileName="${mainFileName}-Java${javaVersion}-r${runCount}-${timeString}${outputFormat}"
+          outputFilePath="${directoryPath}/${mainFileName}-Java${javaVersion}-r${runCount}-${timeString}${outputFormat}"
+          outputFileName="$(basename "${outputFilePath}")"
+          resultLaTeXFilePath="${directoryPath}/${mainFileName}-Java${javaVersion}-r${runCount}-${timeString}.tex"
+          resultPDFFilePath="${directoryPath}/${mainFileName}-Java${javaVersion}-r${runCount}-${timeString}.pdf"
           echo "Dataset: ${{ matrix.dataset }}"
           echo "Java version: ${javaVersion}"
           echo "Run count: ${runCountString} (${runCount})"
           echo "Time string: ${timeString}"
           echo "Output format: ${outputFormat}"
-          echo "Output file path: ${outputFileName}"
+          echo "Output file path: ${outputFilePath}"
+          echo "Python version: ${pythonVersion}"
+          echo "Result LaTeX file path: ${resultLaTeXFilePath}"
+          echo "Result PDF file path: ${resultPDFFilePath}"
           echo "javaVersion=${javaVersion}" >> "${GITHUB_OUTPUT}"
           echo "runCount=${runCount}" >> "${GITHUB_OUTPUT}"
           echo "timeString=${timeString}" >> "${GITHUB_OUTPUT}"
-          echo "outputFileName=${outputFileName}" >> "${GITHUB_OUTPUT}"
+          echo "outputFormat=${outputFormat}" >> "${GITHUB_OUTPUT}"
+          echo "outputFilePath=${outputFilePath}" >> "${GITHUB_OUTPUT}"
+          echo "pythonVersion=${pythonVersion}" >> "${GITHUB_OUTPUT}"
+          echo "resultLaTeXFilePath=${resultLaTeXFilePath}" >> "${GITHUB_OUTPUT}"
+          echo "resultPDFFilePath=${resultPDFFilePath}" >> "${GITHUB_OUTPUT}"
         env:
           javaVersion: ${{ github.event.inputs.javaVersion || 25 }}
           runCountString: ${{ github.event.inputs.runCount || '1' }}
           TZ: 'Asia/Hong_Kong'
-          outputFormat: ${{ github.event.inputs.outputFormat || '.tsv' }}
+          outputFormat: ${{ github.event.inputs.outputFormat || '.csv' }}
+          pythonVersion: ${{ github.event.inputs.pythonVersion || '3.x' }}
       
       - name: Set up JDK ${{ steps.ready.outputs.javaVersion }}
         uses: actions/setup-java@v5
@@ -275,17 +300,68 @@ jobs:
           echo "The current working directory is \"$(pwd)\". "
           if [[ -f "${{ matrix.dataset }}" ]];
           then
-            echo "\$ java TopKMining.java -d \"${{ matrix.dataset }}\" -l Trace -o \"${{ steps.ready.outputs.outputFileName }}\" -r ${{ steps.ready.outputs.runCount }}"
-            java TopKMining.java -d "${{ matrix.dataset }}" -l Trace -o "${{ steps.ready.outputs.outputFileName }}" -r ${{ steps.ready.outputs.runCount }}
+            echo "\$ java TopKMining.java -d \"${{ matrix.dataset }}\" -l Trace -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+            java TopKMining.java -d "${{ matrix.dataset }}" -l Trace -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
           else
             echo "Could not test on the dataset \"${{ matrix.dataset }}\" via Java. "
             tree
             exit 1
           fi
       
-      - name: Upload result
+      - name: Upload the result
         uses: actions/upload-artifact@v7
         with:
-          path: ${{ github.workspace }}/${{ steps.ready.outputs.outputFileName }}
+          path: ${{ github.workspace }}/${{ steps.ready.outputs.outputFilePath }}
           archive: false
           if-no-files-found: error
+      
+      - name: Install system dependencies
+        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
+        run: |
+          cd "${{ github.workspace }}"
+          sudo apt-get update
+          sudo apt-get install -y texlive-latex-extra
+      
+      - name: Set up Python ${{ steps.ready.outputs.pythonVersion }}
+        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ steps.ready.outputs.pythonVersion }}
+      
+      - name: Install Python dependencies
+        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
+        run: |
+          cd "${{ github.workspace }}"
+          python -m pip install --upgrade pip
+          python -m pip install wheel
+          python -m pip install -r requirements.txt
+      
+      - name: Build LaTeX and the PDF for the result
+        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
+        run: |
+          cd "${{ github.workspace }}"
+          echo "The current working directory is \"$(pwd)\". "
+          if [[ -f Draw.py && -f "${{ steps.ready.outputs.outputFilePath }}" ]];
+          then
+            echo "\$ python Draw.py \"${{ steps.ready.outputs.outputFilePath }}\""
+            python Draw.py "${{ steps.ready.outputs.outputFilePath }}"
+          else
+            echo "Could not execute the drawer \"Draw.py\" via Python ${{ steps.ready.outputs.pythonVersion }}. "
+            tree
+          fi
+      
+      - name: Upload the LaTeX source code for the result
+        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ github.workspace }}/${{ steps.ready.outputs.resultLaTeXFilePath }}
+          archive: false
+          if-no-files-found: warn
+      
+      - name: Upload the PDF for the result
+        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ github.workspace }}/${{ steps.ready.outputs.resultPDFFilePath }}
+          archive: false
+          if-no-files-found: warn
