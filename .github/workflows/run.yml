@@ -7,16 +7,18 @@ on:
     paths:
       - '.github/workflows/run.yml'
       - 'Datasets/*.txt'
-      - 'Draw.py'
       - 'TopKMining.java'
+      - 'draw.py'
+      - 'requirements.txt'
   push:
     branches:
       - main
     paths:
       - '.github/workflows/run.yml'
       - 'Datasets/*.txt'
-      - 'Draw.py'
       - 'TopKMining.java'
+      - 'draw.py'
+      - 'requirements.txt'
   workflow_dispatch:
     inputs:
       testAccidents:
@@ -137,14 +139,14 @@ jobs:
             testRetail="${{ github.event.inputs.testRetail }}"
             testSample="${{ github.event.inputs.testSample }}"
           else
-            testAccidents="true"
+            testAccidents="false"
             testChess="true"
-            testConnect="true"
-            testKosarak="true"
+            testConnect="false"
+            testKosarak="false"
             testMushroom="true"
-            testPumsb="true"
-            testPumsbStar="true"
-            testRetail="true"
+            testPumsb="false"
+            testPumsbStar="false"
+            testRetail="false"
             testSample="true"
           fi
           matrix=()
@@ -177,10 +179,10 @@ jobs:
         uses: actions/checkout@v6
         with:
           sparse-checkout: |
+            Datasets
             TopKMining.java
-            Datasets/
       
-      - name: Prepare environment
+      - name: Get ready
         id: ready
         run: |
           cd "${{ github.workspace }}"
@@ -262,31 +264,20 @@ jobs:
           timeString="HKT$(date '+%Y%m%d%H%M%S')"
           outputFilePath="${directoryPath}/${mainFileName}-Java${javaVersion}-r${runCount}-${timeString}${outputFormat}"
           outputFileName="$(basename "${outputFilePath}")"
-          resultLaTeXFilePath="${directoryPath}/${mainFileName}-Java${javaVersion}-r${runCount}-${timeString}.tex"
-          resultPDFFilePath="${directoryPath}/${mainFileName}-Java${javaVersion}-r${runCount}-${timeString}.pdf"
           echo "Dataset: ${{ matrix.dataset }}"
           echo "Java version: ${javaVersion}"
           echo "Run count: ${runCountString} (${runCount})"
           echo "Time string: ${timeString}"
-          echo "Output format: ${outputFormat}"
           echo "Output file path: ${outputFilePath}"
-          echo "Python version: ${pythonVersion}"
-          echo "Result LaTeX file path: ${resultLaTeXFilePath}"
-          echo "Result PDF file path: ${resultPDFFilePath}"
           echo "javaVersion=${javaVersion}" >> "${GITHUB_OUTPUT}"
           echo "runCount=${runCount}" >> "${GITHUB_OUTPUT}"
           echo "timeString=${timeString}" >> "${GITHUB_OUTPUT}"
-          echo "outputFormat=${outputFormat}" >> "${GITHUB_OUTPUT}"
           echo "outputFilePath=${outputFilePath}" >> "${GITHUB_OUTPUT}"
-          echo "pythonVersion=${pythonVersion}" >> "${GITHUB_OUTPUT}"
-          echo "resultLaTeXFilePath=${resultLaTeXFilePath}" >> "${GITHUB_OUTPUT}"
-          echo "resultPDFFilePath=${resultPDFFilePath}" >> "${GITHUB_OUTPUT}"
         env:
           javaVersion: ${{ github.event.inputs.javaVersion || 25 }}
           runCountString: ${{ github.event.inputs.runCount || '1' }}
           TZ: 'Asia/Hong_Kong'
           outputFormat: ${{ github.event.inputs.outputFormat || '.csv' }}
-          pythonVersion: ${{ github.event.inputs.pythonVersion || '3.x' }}
       
       - name: Set up JDK ${{ steps.ready.outputs.javaVersion }}
         uses: actions/setup-java@v5
@@ -314,22 +305,61 @@ jobs:
           path: ${{ github.workspace }}/${{ steps.ready.outputs.outputFilePath }}
           archive: false
           if-no-files-found: error
+  
+  runPython:
+    if: ${{ github.event.inputs.outputFormat || '.csv' }} == '.csv'
+    needs: runJava
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            draw.py
+            requirements.txt
+      
+      - name: Get ready
+        id: ready
+        run: |
+          cd "${{ github.workspace }}"
+          directoryPath="Outputs"
+          mainFileName="summaries"
+          timeString="HKT$(date '+%Y%m%d%H%M%S')"
+          resultLaTeXFilePath="${directoryPath}/${mainFileName}-Python${pythonVersion}-${timeString}.tex"
+          resultPDFFilePath="${directoryPath}/${mainFileName}-Python${pythonVersion}-${timeString}.pdf"
+          echo "Directory path: ${directoryPath}"
+          echo "Time string: ${timeString}"
+          echo "Result LaTeX file path: ${resultLaTeXFilePath}"
+          echo "Result PDF file path: ${resultPDFFilePath}"
+          echo "Python version: ${pythonVersion}"
+          echo "directoryPath=${directoryPath}" >> "${GITHUB_OUTPUT}"
+          echo "timeString=${timeString}" >> "${GITHUB_OUTPUT}"
+          echo "resultLaTeXFilePath=${resultLaTeXFilePath}" >> "${GITHUB_OUTPUT}"
+          echo "resultPDFFilePath=${resultPDFFilePath}" >> "${GITHUB_OUTPUT}"
+          echo "pythonVersion=${pythonVersion}" >> "${GITHUB_OUTPUT}"
+        env:
+          pythonVersion: ${{ github.event.inputs.pythonVersion || '3.x' }}
+          TZ: 'Asia/Hong_Kong'
+      
+      - name: Gather artifacts
+        uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+          path: ${{ github.workspace }}/${{ steps.ready.outputs.directoryPath }}
       
       - name: Install system dependencies
-        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
         run: |
           cd "${{ github.workspace }}"
           sudo apt-get update
-          sudo apt-get install -y texlive-latex-extra
+          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+          sudo apt-get install -y texlive-latex-extra ttf-mscorefonts-installer
       
       - name: Set up Python ${{ steps.ready.outputs.pythonVersion }}
-        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
         uses: actions/setup-python@v6
         with:
           python-version: ${{ steps.ready.outputs.pythonVersion }}
       
       - name: Install Python dependencies
-        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
         run: |
           cd "${{ github.workspace }}"
           python -m pip install --upgrade pip
@@ -337,21 +367,28 @@ jobs:
           python -m pip install -r requirements.txt
       
       - name: Build LaTeX and the PDF for the result
-        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
         run: |
           cd "${{ github.workspace }}"
           echo "The current working directory is \"$(pwd)\". "
-          if [[ -f Draw.py && -f "${{ steps.ready.outputs.outputFilePath }}" ]];
+          if [[ -f draw.py && -d "${{ steps.ready.outputs.directoryPath }}" ]];
           then
-            echo "\$ python Draw.py \"${{ steps.ready.outputs.outputFilePath }}\""
-            python Draw.py "${{ steps.ready.outputs.outputFilePath }}"
+            echo "\$ python draw.py \"${{ steps.ready.outputs.directoryPath }}\""
+            python draw.py "${{ steps.ready.outputs.directoryPath }}"
+            mv "${{ steps.ready.outputs.directoryPath }}/summaries.tex" "${{ steps.ready.outputs.resultLaTeXFilePath }}"
+            mv "${{ steps.ready.outputs.directoryPath }}/summaries.pdf" "${{ steps.ready.outputs.resultPDFFilePath }}"
           else
-            echo "Could not execute the drawer \"Draw.py\" via Python ${{ steps.ready.outputs.pythonVersion }}. "
+            echo "Could not execute \"draw.py\" via Python ${{ steps.ready.outputs.pythonVersion }}. "
             tree
           fi
       
+      - name: Upload the figures for the result
+        uses: actions/upload-artifact@v7
+        with:
+          name: figures-Python${{ steps.ready.outputs.pythonVersion }}-${{ steps.ready.outputs.timeString }}.zip
+          path: ${{ github.workspace }}/${{ steps.ready.outputs.directoryPath }}/*.pdf
+          if-no-files-found: warn
+      
       - name: Upload the LaTeX source code for the result
-        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
         uses: actions/upload-artifact@v7
         with:
           path: ${{ github.workspace }}/${{ steps.ready.outputs.resultLaTeXFilePath }}
@@ -359,7 +396,6 @@ jobs:
           if-no-files-found: warn
       
       - name: Upload the PDF for the result
-        if: ${{ steps.ready.outputs.outputFormat == '.csv' }}
         uses: actions/upload-artifact@v7
         with:
           path: ${{ github.workspace }}/${{ steps.ready.outputs.resultPDFFilePath }}

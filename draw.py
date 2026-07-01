@@ -317,22 +317,27 @@ class Drawers:
 							"runCount":(lambda x:Drawers.__to_numeric(x, errors = "coerce")), "Time consumption (ns)":(lambda x:Drawers.__to_numeric(x, errors = "coerce")), 
 							"Memory consumption (B)":(lambda x:Drawers.__to_numeric(x, errors = "coerce")), "$\\delta^*$":(lambda x:Drawers.__to_numeric(x, errors = "coerce"))
 						}, ["Algorithm", "$\\alpha$", "$\\beta$"], "$k$", ["Time consumption (ns)", "Memory consumption (B)", "$\\delta^*$"]
-					) >= 1# and drawer.toLaTeX(Drawers.__format("%p%s%m_time.tex", _m = m, _n = n, _p = p, _x = x), getAlgorithm)
-					and drawer.draw(
-						Drawers.__format("%p%s%m_time{0}".format(extension), _m = m, _n = n, _p = p, _x = x), "Time consumption (ns)", 
+					) >= 1 and drawer.draw(
+						Drawers.__format("%p%s%m-time{0}".format(extension), _m = m, _n = n, _p = p, _x = x), "Time consumption (ns)", 
 						Drawers.__plt, lambda x:Drawers.__ln(x), lambda x:x / 1000000000, getMarker, getColor, getLabel, "$\\ln k$", "Time consumption (s)"
 					) and drawer.draw(
-						Drawers.__format("%p%s%m_space{0}".format(extension), _m = m, _n = n, _p = p, _x = x), "Memory consumption (B)", 
+						Drawers.__format("%p%s%m-space{0}".format(extension), _m = m, _n = n, _p = p, _x = x), "Memory consumption (B)", 
 						Drawers.__plt, lambda x:Drawers.__ln(x), lambda x:x / 1048576, getMarker, getColor, getLabel, "$\\ln k$", "Memory consumption (MB)"
 					) and drawer.draw(
-						Drawers.__format("%p%s%m_delta{0}".format(extension), _m = m, _n = n, _p = p, _x = x), "$\\delta^*$", 
+						Drawers.__format("%p%s%m-delta{0}".format(extension), _m = m, _n = n, _p = p, _x = x), "$\\delta^*$", 
 						Drawers.__plt, lambda x:Drawers.__ln(x), lambda x:x, getMarker, getColor, getLabel, "$\\ln k$", "$\\delta^*$"
 					)
 				):
 					successCount += 1
 				Drawers.__plt.close()
 				summary = drawer.summarize(getAlgorithm)
-				datasetName = "".join(character for character in m if '0' <= character <= '9' or 'A' <= character <= 'Z'  or 'a' <= character <= 'z')
+				datasetNameBuffer = []
+				for character in m:
+					if '0' <= character <= '9' or 'A' <= character <= 'Z'  or '_' == character or 'a' <= character <= 'z':
+						datasetNameBuffer.append(character)
+					else:
+						break
+				datasetName = "".join(datasetNameBuffer)
 				for outerKey, outerValue in summary.items():
 					self.__summaries.setdefault(outerKey, {})
 					self.__summaries[outerKey].setdefault(datasetName, {})
@@ -416,7 +421,7 @@ class Drawers:
 						f.write("\t\\caption{{{0}. }}\n".format(getCaption(outerKey)))
 						tableLabel = []
 						for character in outerKey:
-							if '0' <= character <= '9' or 'A' <= character <= 'Z' or 'a' <= character <= 'z':
+							if '0' <= character <= '9' or 'A' <= character <= 'Z' or '_' == character or 'a' <= character <= 'z':
 								tableLabel.append(character)
 							else:
 								break
