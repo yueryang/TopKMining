@@ -123,10 +123,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      outputFormat: ${{ github.event.inputs.outputFormat || '.csv' }}
+      runCount: ${{ steps.runCount.outputs.runCount }}
+      timeString: ${{ steps.timeString.outputs.timeString }}
     steps:
       - name: Prepare the matrix
         id: matrix
         run: |
+          cd "${{ github.workspace }}"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]];
           then
             testAccidents="${{ github.event.inputs.testAccidents }}"
@@ -165,29 +169,11 @@ jobs:
           else
             echo "matrix=[]" >> "${GITHUB_OUTPUT}"
           fi
-  
-  runJava:
-    if: needs.prepare.outputs.matrix != '[]'
-    needs: prepare
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        dataset: ${{ fromJson(needs.prepare.outputs.matrix) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          sparse-checkout: |
-            Datasets
-            TopKMining.java
       
-      - name: Get ready
-        id: ready
+      - name: Prepare the run count
+        id: runCount
         run: |
           cd "${{ github.workspace }}"
-          
-          # Run count #
           integerNumberString="$(echo -n "${runCountString}" | tr -cd '0-9A-Za-z+.-' | tr 'A-Z' 'a-z')"
           leadingSigns="${integerNumberString%%[!+-]*}"
           minusCount=$(echo -n "${leadingSigns}" | tr -cd '-' | wc -c)
@@ -256,28 +242,56 @@ jobs:
           then
             runCount=1
           fi
-          
+          echo "runCount=${runCount}" >> "${GITHUB_OUTPUT}"
+        env:
+          runCountString: ${{ github.event.inputs.runCount || '1' }}
+      
+      - name: Prepare the time string
+        id: timeString
+        run: |
+          cd "${{ github.workspace }}"
+          timeString="HKT$(date '+%Y%m%d%H%M%S')"
+          echo "timeString=${timeString}" >> "${GITHUB_OUTPUT}"
+        env:
+          TZ: 'Asia/Hong_Kong'
+  
+  runJava:
+    if: ${{ needs.prepare.outputs.matrix != '[]' }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dataset: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            ${{ matrix.dataset }}
+            TopKMining.java
+      
+      - name: Get ready
+        id: ready
+        run: |
+          cd "${{ github.workspace }}"
           directoryPath="Outputs"
           mainFileName="$(basename "${{ matrix.dataset }}" | sed "s/\.[^.]*\$//g")"
-          timeString="HKT$(date '+%Y%m%d%H%M%S')"
           outputFilePath="${directoryPath}/${mainFileName}-Java${javaVersion}-r${runCount}-${timeString}${outputFormat}"
           outputFileName="$(basename "${outputFilePath}")"
           echo "Dataset: ${{ matrix.dataset }}"
           echo "Java version: ${javaVersion}"
-          echo "Run count: ${runCountString} (${runCount})"
+          echo "Run count: ${runCount}"
           echo "Time string: ${timeString}"
-          echo "Output format: ${outputFormat}"
           echo "Output file path: ${outputFilePath}"
           echo "javaVersion=${javaVersion}" >> "${GITHUB_OUTPUT}"
           echo "runCount=${runCount}" >> "${GITHUB_OUTPUT}"
-          echo "timeString=${timeString}" >> "${GITHUB_OUTPUT}"
-          echo "outputFormat=${outputFormat}" >> "${GITHUB_OUTPUT}"
           echo "outputFilePath=${outputFilePath}" >> "${GITHUB_OUTPUT}"
         env:
           javaVersion: ${{ github.event.inputs.javaVersion || 25 }}
-          runCountString: ${{ github.event.inputs.runCount || '1' }}
-          TZ: 'Asia/Hong_Kong'
-          outputFormat: ${{ github.event.inputs.outputFormat || '.csv' }}
+          runCount: ${{ needs.prepare.outputs.runCount }}
+          timeString: ${{ needs.prepare.outputs.timeString }}
+          outputFormat: ${{ needs.prepare.outputs.outputFormat }}
       
       - name: Set up JDK ${{ steps.ready.outputs.javaVersion }}
         uses: actions/setup-java@v5
@@ -307,8 +321,10 @@ jobs:
           if-no-files-found: error
   
   runPython:
-    if: ${{ needs.runJava.outputs.outputFormat == '.csv' }}
-    needs: runJava
+    if: ${{ always() && needs.prepare.outputs.outputFormat == '.csv' }}
+    needs:
+      - prepare
+      - runJava
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -324,7 +340,6 @@ jobs:
           cd "${{ github.workspace }}"
           directoryPath="Outputs"
           mainFileName="summaries"
-          timeString="HKT$(date '+%Y%m%d%H%M%S')"
           resultLaTeXFilePath="${directoryPath}/${mainFileName}-Python${pythonVersion}-${timeString}.tex"
           resultPDFFilePath="${directoryPath}/${mainFileName}-Python${pythonVersion}-${timeString}.pdf"
           echo "Directory path: ${directoryPath}"
@@ -333,13 +348,12 @@ jobs:
           echo "Result PDF file path: ${resultPDFFilePath}"
           echo "Python version: ${pythonVersion}"
           echo "directoryPath=${directoryPath}" >> "${GITHUB_OUTPUT}"
-          echo "timeString=${timeString}" >> "${GITHUB_OUTPUT}"
           echo "resultLaTeXFilePath=${resultLaTeXFilePath}" >> "${GITHUB_OUTPUT}"
           echo "resultPDFFilePath=${resultPDFFilePath}" >> "${GITHUB_OUTPUT}"
           echo "pythonVersion=${pythonVersion}" >> "${GITHUB_OUTPUT}"
         env:
           pythonVersion: ${{ github.event.inputs.pythonVersion || '3.x' }}
-          TZ: 'Asia/Hong_Kong'
+          timeString: ${{ needs.prepare.outputs.timeString }}
       
       - name: Gather artifacts
         uses: actions/download-artifact@v8
@@ -366,14 +380,14 @@ jobs:
           python -m pip install wheel
           python -m pip install -r requirements.txt
       
-      - name: Build LaTeX and the PDF for the result
+      - name: Build LaTeX and the PDF for the results
         run: |
           cd "${{ github.workspace }}"
           echo "The current working directory is \"$(pwd)\". "
           if [[ -f draw.py && -d "${{ steps.ready.outputs.directoryPath }}" ]];
           then
             echo "\$ python draw.py \"${{ steps.ready.outputs.directoryPath }}\""
-            python draw.py "${{ steps.ready.outputs.directoryPath }}"
+            echo "" | python draw.py "${{ steps.ready.outputs.directoryPath }}"
             mv "${{ steps.ready.outputs.directoryPath }}/summaries.tex" "${{ steps.ready.outputs.resultLaTeXFilePath }}"
             mv "${{ steps.ready.outputs.directoryPath }}/summaries.pdf" "${{ steps.ready.outputs.resultPDFFilePath }}"
           else
@@ -381,21 +395,21 @@ jobs:
             tree
           fi
       
-      - name: Upload the figures for the result
+      - name: Zip and upload the figures for the results
         uses: actions/upload-artifact@v7
         with:
-          name: figures-Python${{ steps.ready.outputs.pythonVersion }}-${{ steps.ready.outputs.timeString }}.zip
+          name: figures-Python${{ steps.ready.outputs.pythonVersion }}-${{ needs.prepare.outputs.timeString }}.zip
           path: ${{ github.workspace }}/${{ steps.ready.outputs.directoryPath }}/*.pdf
           if-no-files-found: warn
       
-      - name: Upload the LaTeX source code for the result
+      - name: Upload the LaTeX source code for the results
         uses: actions/upload-artifact@v7
         with:
           path: ${{ github.workspace }}/${{ steps.ready.outputs.resultLaTeXFilePath }}
           archive: false
           if-no-files-found: warn
       
-      - name: Upload the PDF for the result
+      - name: Upload the PDF for the results
         uses: actions/upload-artifact@v7
         with:
           path: ${{ github.workspace }}/${{ steps.ready.outputs.resultPDFFilePath }}
