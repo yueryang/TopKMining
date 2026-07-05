@@ -143,14 +143,14 @@ jobs:
             testRetail="${{ github.event.inputs.testRetail }}"
             testSample="${{ github.event.inputs.testSample }}"
           else
-            testAccidents="false"
+            testAccidents="true"
             testChess="true"
             testConnect="true"
-            testKosarak="false"
+            testKosarak="true"
             testMushroom="true"
-            testPumsb="false"
-            testPumsbStar="false"
-            testRetail="false"
+            testPumsb="true"
+            testPumsbStar="true"
+            testRetail="true"
             testSample="true"
           fi
           matrix=()
@@ -308,8 +308,8 @@ jobs:
             echo "\$ java TopKMining.java -h"
             java TopKMining.java -h
             echo ""
-            echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
-            java TopKMining.java -i "${{ matrix.dataset }}" -l Debug -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+            echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -m 0.001 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+            java TopKMining.java -i "${{ matrix.dataset }}" -l Debug -m 0.001 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
           else
             echo "Could not test on the dataset \"${{ matrix.dataset }}\" via Java. "
             tree

@@ -107,19 +107,19 @@ class Formatter
 		for (final char character : String.valueOf(object).toCharArray())
 			switch (character)
 			{
-			case '\b': // 0x08
+			case '\b': // 0u0008
 				sb.append("\\b");
 				break;
-			case '\t': // \x09
+			case '\t': // \u0009
 				sb.append("\\t");
 				break;
-			case '\n': // \x0A
+			case '\n': // \u000A
 				sb.append("\\n");
 				break;
-			case '\f': // \x0C
+			case '\f': // \u000C
 				sb.append("\\f");
 				break;
-			case '\r': // \x0D
+			case '\r': // \u000D
 				sb.append("\\r");
 				break;
 			case '\"':
@@ -217,7 +217,7 @@ class Formatter
 
 class Parser
 {
-	private static final double DefaultDeltaRatio = 0.7;
+	private static final double DefaultDeltaRatio = 0.75;
 	private static final LogLevel DefaultLogLevel = LogLevel.Info;
 	private static final int DefaultMaximumTransactionCount = Integer.MAX_VALUE;
 	private static final int DefaultRunCount = 10;
@@ -299,7 +299,7 @@ class Parser
 		System.out.println();
 		System.out.println("Notes:");
 		System.out.println(
-			"\t1) All arguments are optional and processed sequentially. If the same argument is provided multiple times, "
+			"\t1) All options are optional and processed sequentially. If the same argument is provided multiple times, "
 			+ "the last valid one will silently overwrite previous ones. Unrecognized or invalid arguments will be skipped with an aggregated warning. "
 		);
 		System.out.println("\t2) The $\\delta_0$ will be set to $0$ if the borrowed oracle threshold $\\delta^*$ becomes negative after being multiplied by the delta ratio. ");
@@ -895,16 +895,34 @@ class Logger
 	}
 }
 
-abstract class Algorithm implements Serializable
+abstract class Algorithm<T extends Algorithm.Transaction> implements Serializable
 {
+	abstract static class Transaction implements Serializable
+	{
+		int tid = 0;
+		double ttf = 0.0;
+		
+		Transaction()
+		{
+			
+		}
+		int size()
+		{
+			return 0;
+		}
+	};
+	
 	private static final double DefaultAlpha = 0.5, DefaultBeta = 0.5, DefaultDelta = Double.NEGATIVE_INFINITY;
 	private static final int DefaultK = 10;
+	static final int InitialBufferSize = 100;
 	
 	String algorithmName = "Specified";
 	double alpha = DefaultAlpha, beta = DefaultBeta, delta = DefaultDelta;
 	int k = DefaultK;
 	transient Logger logger = null;
-	long peakMemory = 0L;
+	ArrayList<T> transactions = null;
+	boolean strategy_ETF = true, strategy_LETF_E = true, strategy_LETF_LB = true, strategyPruning = true;
+	transient long peakMemory = 0L;
 	
 	Algorithm(final String _algorithmName, final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
 	{
@@ -937,9 +955,100 @@ abstract class Algorithm implements Serializable
 		this.logger.print(
 			"Algorithm" + this.algorithmName + ": Initialized the " + this.algorithmName + " algorithm with $\\alpha = " + this.alpha
 			+ "$, $\\beta = " + this.beta + "$, $\\delta = " + String.valueOf(this.delta).replace("Infinity", "\\infty") + "$, and $k = " + this.k + ". ", 
-			LogLevel.Debug
+			LogLevel.Info
 		);
-		this.checkMemory();
+	}
+	private String tell(final String inputFilePath, final String prefix)
+	{
+		final int transactionCount = this.transactions.size();
+		StringBuilder stringBuilder = new StringBuilder();
+		if (transactionCount >= 2)
+		{
+			int overallEventCount = 0, maximumTransactionEventCount = Integer.MIN_VALUE, minimumTransactionEventCount = Integer.MAX_VALUE;
+			double overallTTF = 0.0, maximumTTF = Double.NEGATIVE_INFINITY, minimumTTF = Double.POSITIVE_INFINITY;
+			for (final Transaction transaction : this.transactions)
+			{
+				final int transactionEventCount = transaction.size();
+				overallEventCount += transactionEventCount;
+				if (transactionEventCount > maximumTransactionEventCount)
+					maximumTransactionEventCount = transactionEventCount;
+				if (transactionEventCount < minimumTransactionEventCount)
+					minimumTransactionEventCount = transactionEventCount;
+				overallTTF += transaction.ttf;
+				if (transaction.ttf > maximumTTF)
+					maximumTTF = transaction.ttf;
+				if (transaction.ttf < minimumTTF)
+					minimumTTF = transaction.ttf;
+			}
+			stringBuilder.append(prefix instanceof String ? prefix : "Collected ").append(transactionCount).append(" transactions from ")
+				.append(Formatter.escapeString(inputFilePath)).append(", where, the first and the last transaction IDs are ").append(this.transactions.get(0).tid)
+				.append(" and ").append(this.transactions.get(transactionCount - 1).tid).append(", respectively. ");
+			stringBuilder.append("Each transaction contains about ").append(overallEventCount).append(" / ")
+				.append(transactionCount).append(" = ").append((double)overallEventCount / transactionCount).append(" event(s) on average");
+			if (maximumTransactionEventCount >= minimumTransactionEventCount)
+				stringBuilder.append(", with a range of ").append(maximumTransactionEventCount).append(" - ")
+					.append(minimumTransactionEventCount).append(" = ").append(maximumTransactionEventCount - minimumTransactionEventCount).append(". ");
+			else
+				stringBuilder.append(". ");
+			stringBuilder.append("The average TTF is ").append(overallTTF).append(" / ").append(transactionCount).append(" = ").append(overallTTF / transactionCount);
+			if (maximumTTF >= minimumTTF)
+				stringBuilder.append(", with a range of ").append(maximumTTF).append(" - ").append(minimumTTF < 0 ? "(" + minimumTTF + ")" : minimumTTF)
+					.append(" = ").append(maximumTTF - minimumTTF).append(". ");
+			else
+				stringBuilder.append(". ");
+		}
+		else if (1 == transactionCount)
+			stringBuilder.append(prefix instanceof String ? prefix : "Collected ").append("1 transaction, whose transaction ID is ")
+				.append(this.transactions.get(0).tid).append(", from ").append(Formatter.escapeString(inputFilePath)).append(". This transaction contains ")
+				.append(this.transactions.get(0).size()).append("event(s). Its TTF is ").append(this.transactions.get(0).ttf).append(". ");
+		else
+			stringBuilder.append("No transactions were collected from ").append(Formatter.escapeString(inputFilePath)).append(". ");
+		return stringBuilder.toString();
+	}
+	void cropTransactions(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
+	{
+		final String statistics = this.tell(inputFilePath, "Collected ");
+		if (this.transactions.isEmpty())
+			this.logger.print("Algorithm" + this.algorithmName + ": " + statistics, LogLevel.Warning);
+		else
+		{
+			final int transactionCount = this.transactions.size(), offset = this.transactions.get(0).tid; // ``offset`` indicates the first transaction ID in ``this.transactions``
+			int leftClosing = 0, rightOpening = transactionCount;
+			if (startingTransactionID instanceof Integer)
+			{
+				final int intValue = startingTransactionID.intValue();
+				if (intValue >= offset)
+					leftClosing = Math.min(intValue, transactionCount) - offset;
+			}
+			else if (startingTransactionID instanceof Double)
+			{
+				final double doubleValue = startingTransactionID.doubleValue();
+				if (0 < doubleValue && doubleValue < 1)
+					leftClosing = (int)(doubleValue * transactionCount) - offset; // ``doubleValue`` must be the left operand of the operator ``*``
+			}
+			leftClosing = Math.max(leftClosing, 0);
+			if (maximumTransactionCount instanceof Integer)
+			{
+				final int intValue = maximumTransactionCount.intValue();
+				if (intValue >= offset)
+					rightOpening = Math.max(leftClosing + intValue, 0);
+			}
+			else if (maximumTransactionCount instanceof Double)
+			{
+				final double doubleValue = maximumTransactionCount.doubleValue();
+				if (0 < doubleValue && doubleValue < 1)
+					rightOpening = Math.max(leftClosing + (int)(doubleValue * rightOpening), 0); // ``doubleValue`` must be the left operand of the operator ``*``
+			}
+			rightOpening = Math.min(rightOpening, this.transactions.size());
+			this.transactions.subList(rightOpening, this.transactions.size()).clear();
+			this.transactions.subList(0, leftClosing).clear();
+			if (this.transactions.isEmpty())
+				this.logger.print("Algorithm" + this.algorithmName + ": " + statistics + "However, no transactions remain after the crop operation. ", LogLevel.Warning);
+			else if (this.transactions.size() == transactionCount)
+				this.logger.print("Algorithm" + this.algorithmName + ": " + statistics, LogLevel.Debug);
+			else
+				this.logger.print("Algorithm" + this.algorithmName + ": " + statistics + this.tell(inputFilePath, "After cropping, selected "), LogLevel.Debug);
+		}
 	}
 	final boolean checkMemory()
 	{
@@ -967,7 +1076,7 @@ abstract class Algorithm implements Serializable
 	public abstract ArrayList<Double> getTopKValues();
 }
 
-class AlgorithmTHUI extends Algorithm
+class AlgorithmTHUI extends Algorithm<AlgorithmTHUI.Transaction>
 {
 	private static class ItemInfo implements Serializable
 	{
@@ -979,28 +1088,10 @@ class AlgorithmTHUI extends Algorithm
 			this.rtf = 0.0;
 		}
 	}
-	private static class Transaction implements Serializable
+	static class Transaction extends Algorithm.Transaction
 	{
-		int tid = 0;
 		LinkedHashMap<Integer, ItemInfo> items = new LinkedHashMap<>();
-		Double ttf = null;
 		
-		Transaction()
-		{
-			
-		}
-		Transaction(int tid)
-		{
-			this.setTid(tid);
-		}
-		void setTid(int tid)
-		{
-			this.tid = tid;
-		}
-		boolean contains(Integer item)
-		{
-			return this.items.containsKey(item);
-		}
 		boolean put(Integer item, ItemInfo info)
 		{
 			if (this.items.containsKey(item))
@@ -1010,6 +1101,15 @@ class AlgorithmTHUI extends Algorithm
 				items.put(item, info);
 				return true;
 			}
+		}
+		@Override
+		int size()
+		{
+			return items.size();
+		}
+		boolean contains(Integer item)
+		{
+			return this.items.containsKey(item);
 		}
 		boolean remove(Integer item)
 		{
@@ -1137,8 +1237,6 @@ class AlgorithmTHUI extends Algorithm
 	static private int DefaultColumnIndex = 2;
 	
 	private int columnIndex = DefaultColumnIndex;
-	private boolean strategy_ETF = false, strategy_LETF_E = false, strategy_LETF_LB = false, strategyPruning = true;
-	private final ArrayList<Transaction> transactions = new ArrayList<Transaction>();
 	private LinkedHashMap<Integer, Double> TWTF = new LinkedHashMap<>();
 	private int[] sequence = null;
 	private ItemEvent[] itemEvents = null;
@@ -1148,7 +1246,6 @@ class AlgorithmTHUI extends Algorithm
 	private final PriorityQueue<Double> letf_lb = new PriorityQueue<>();
 	private final PriorityQueue<HTFE> finalResults = new PriorityQueue<>();
 	private int candidateCount = 0;
-	private final int BUFFERS_SIZE = 200;
 	
 	public AlgorithmTHUI(final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
 	{
@@ -1205,6 +1302,13 @@ class AlgorithmTHUI extends Algorithm
 					if (ex != null)
 						exULs.add(ex);
 				}
+				if (prefixLength >= prefix.length)
+				{
+					final int newSize = prefix.length << 1;
+					int[] newPrefix = new int[newSize];
+					System.arraycopy(prefix, 0, newPrefix, 0, prefix.length);
+					prefix = newPrefix;
+				}
 				prefix[prefixLength] = X.item;
 				thui(prefix, prefixLength + 1, X, exULs);
 			}
@@ -1258,6 +1362,7 @@ class AlgorithmTHUI extends Algorithm
 	/* Main procedures */
 	private boolean loadDataset(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
 	{
+		this.transactions = new ArrayList<Transaction>();
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(inputFilePath), StandardCharsets.UTF_8)))
 		{
 			String line = null;
@@ -1300,63 +1405,7 @@ class AlgorithmTHUI extends Algorithm
 						colonWarningFlag = true;
 				}
 			}
-			if (this.transactions.isEmpty())
-				this.logger.print(
-					"Algorithm" + this.algorithmName + ": No transactions were collected from " + Formatter.escapeString(inputFilePath) + ". ", LogLevel.Warning
-				);
-			else
-			{
-				final int originalTransactionCount = this.transactions.size(), offset = this.transactions.get(0).tid; // ``offset`` indicates the first transaction ID in ``this.transactions``
-				int leftClosing = 0, rightOpening = originalTransactionCount;
-				if (startingTransactionID instanceof Integer)
-				{
-					final int intValue = startingTransactionID.intValue();
-					if (intValue >= offset)
-						leftClosing = Math.min(intValue, originalTransactionCount) - offset;
-				}
-				else if (startingTransactionID instanceof Double)
-				{
-					final double doubleValue = startingTransactionID.doubleValue();
-					if (0 < doubleValue && doubleValue < 1)
-						leftClosing = (int)(doubleValue * originalTransactionCount) - offset; // ``doubleValue`` must be the left operand of the operator ``*``
-				}
-				leftClosing = Math.max(leftClosing, 0);
-				if (maximumTransactionCount instanceof Integer)
-				{
-					final int intValue = maximumTransactionCount.intValue();
-					if (intValue >= offset)
-						rightOpening = Math.max(leftClosing + intValue, 0);
-				}
-				else if (maximumTransactionCount instanceof Double)
-				{
-					final double doubleValue = maximumTransactionCount.doubleValue();
-					if (0 < doubleValue && doubleValue < 1)
-						rightOpening = Math.max(leftClosing + (int)(doubleValue * rightOpening), 0); // ``doubleValue`` must be the left operand of the operator ``*``
-				}
-				rightOpening = Math.min(rightOpening, this.transactions.size());
-				this.transactions.subList(rightOpening, this.transactions.size()).clear();
-				this.transactions.subList(0, leftClosing).clear();
-				if (this.transactions.isEmpty())
-					this.logger.print(
-						"Algorithm" + this.algorithmName + ": Collected " + originalTransactionCount + " transaction(s) from " + Formatter.escapeString(inputFilePath)
-						+ ". However, no transactions remain after the crop operation. ", LogLevel.Warning
-					);
-				else
-				{
-					final int transactionSize = this.transactions.size();
-					if (transactionSize > 1)
-						this.logger.print(
-							"Algorithm" + this.algorithmName + ": Collected " + originalTransactionCount + " transaction(s) from " + Formatter.escapeString(inputFilePath)
-							+ ". After cropping (if specified), " + transactionSize + " transactions remain, where, the first and the last transaction IDs are "
-							+ this.transactions.get(0).tid + " and " + this.transactions.get(transactionSize - 1).tid + ", respectively. ", LogLevel.Debug
-						);
-					else
-						this.logger.print(
-							"Algorithm" + this.algorithmName + ": Collected " + originalTransactionCount + " transaction(s) from " + Formatter.escapeString(inputFilePath)
-							+ ". After cropping (if specified), only the transaction, whose transaction ID is " + this.transactions.get(0).tid + ", remains. ", LogLevel.Debug
-						);
-				}
-			}
+			this.cropTransactions(inputFilePath, startingTransactionID, maximumTransactionCount);
 			if (colonWarningFlag)
 				this.logger.print(
 					"Algorithm" + this.algorithmName + ": One or more effective lines contain fewer than " + this.columnIndex + " colon(s), which have been skipped. ", LogLevel.Warning
@@ -1451,14 +1500,15 @@ class AlgorithmTHUI extends Algorithm
 	}
 	private void sortTTFE()
 	{
-		for (int i = 0; i < transactions.size(); ++i)
+		for (int i = 0; i < this.transactions.size(); ++i)
 		{
 			final Transaction oldTransaction = transactions.get(i);
-			Transaction newT = new Transaction(oldTransaction.tid);
+			Transaction newTransaction = new Transaction();
+			newTransaction.tid = oldTransaction.tid;
 			for (Map.Entry<Integer, Double> e : TWTF.entrySet())
 				if (oldTransaction.items.containsKey(e.getKey()))
-					newT.put(e.getKey(), oldTransaction.items.get(e.getKey()));
-			transactions.set(i, newT);
+					newTransaction.put(e.getKey(), oldTransaction.items.get(e.getKey()));
+			this.transactions.set(i, newTransaction);
 		}
 	}
 	private void generateTable()
@@ -1606,7 +1656,7 @@ class AlgorithmTHUI extends Algorithm
 			if (ul != null && ul.elements.size() > 0)
 				listOfULists.add(ul);
 		}
-		int[] prefix = new int[BUFFERS_SIZE];
+		int[] prefix = new int[InitialBufferSize];
 		thui(prefix, 0, null, listOfULists);
 		mapItemToUList.clear();
 	}
@@ -1631,7 +1681,7 @@ class AlgorithmTHUI extends Algorithm
 				final long endTime = System.nanoTime();
 				return new Number[] { endTime - startTime, this.peakMemory, this.delta };
 			}
-			catch (Throwable e)
+			catch (NullPointerException e)//////////////////
 			{
 				this.logger.print("Algorithm" + this.algorithmName + ": Failed to execute the " + this.algorithmName + " algorithm due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
 			}
@@ -1669,7 +1719,7 @@ class AlgorithmTHUI extends Algorithm
 	}
 }
 
-class AlgorithmTHUFI extends Algorithm
+class AlgorithmTHUFI extends Algorithm<AlgorithmTHUFI.Transaction>
 {
 	private static class PatternTHUFI implements Comparable<PatternTHUFI>, Serializable
 	{
@@ -1796,7 +1846,7 @@ class AlgorithmTHUFI extends Algorithm
 	}
 }
 
-class AlgorithmTTFE extends Algorithm
+class AlgorithmTTFE extends Algorithm<AlgorithmTTFE.Transaction>
 {
 	class TF implements Serializable
 	{
@@ -1809,24 +1859,10 @@ class AlgorithmTTFE extends Algorithm
 			this.tf = alpha * threat + beta * frequency;
 		}
 	}
-	static class Transaction implements Serializable
+	static class Transaction extends Algorithm.Transaction
 	{
-		int tid = 0;
 		LinkedHashMap<Integer, TF> events = new LinkedHashMap<>();
-		double ttf = 0.0;
 		
-		Transaction()
-		{
-			
-		}
-		Transaction(int tid)
-		{
-			this.setTid(tid);
-		}
-		void setTid(int tid)
-		{
-			this.tid = tid;
-		}
 		boolean put(Integer item, TF tf)
 		{
 			if (this.events.containsKey(item))
@@ -1836,6 +1872,11 @@ class AlgorithmTTFE extends Algorithm
 				events.put(item, tf);
 				return true;
 			}
+		}
+		@Override
+		int size()
+		{
+			return events.size();
 		}
 		boolean contains(Integer item)
 		{
@@ -1973,8 +2014,6 @@ class AlgorithmTTFE extends Algorithm
 		}
 	}
 	
-	boolean strategy_ETF = true, strategy_LETF_E = true, strategy_LETF_LB = true, strategyPruning = true;
-	ArrayList<Transaction> transactions = new ArrayList<>();
 	private LinkedHashMap<Integer, Double> TWTF = new LinkedHashMap<>();
 	private int[] sequence = null;
 	private Event[] events = null;
@@ -1984,7 +2023,6 @@ class AlgorithmTTFE extends Algorithm
 	private final PriorityQueue<Double> letf_lb = new PriorityQueue<>();
 	final PriorityQueue<HTFE> finalResults = new PriorityQueue<>();
 	private int candidateCount = 0;
-	private final int BUFFERS_SIZE = 200;
 	
 	public AlgorithmTTFE(final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
 	{
@@ -2088,6 +2126,7 @@ class AlgorithmTTFE extends Algorithm
 	/* Main procedures */
 	boolean loadDataset(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
 	{
+		this.transactions = new ArrayList<Transaction>();
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(inputFilePath), StandardCharsets.UTF_8)))
 		{
 			String line = null;
@@ -2133,6 +2172,7 @@ class AlgorithmTTFE extends Algorithm
 						colonWarningFlag = true;
 				}
 			}
+			this.cropTransactions(inputFilePath, startingTransactionID, maximumTransactionCount);
 			if (colonWarningFlag)
 				this.logger.print(
 					"Algorithm" + this.algorithmName + ": One or more effective lines contain fewer than 3 colons, which have been skipped. ", LogLevel.Warning
@@ -2227,14 +2267,15 @@ class AlgorithmTTFE extends Algorithm
 	}
 	private void sortTTFE()
 	{
-		for (int i = 0; i < transactions.size(); ++i)
+		for (int i = 0; i < this.transactions.size(); ++i)
 		{
-			final Transaction oldTransaction = transactions.get(i);
-			Transaction newT = new Transaction(oldTransaction.tid);
+			final Transaction oldTransaction = this.transactions.get(i);
+			Transaction newTransaction = new Transaction();
+			newTransaction.tid = oldTransaction.tid;
 			for (Map.Entry<Integer, Double> e : TWTF.entrySet())
 				if (oldTransaction.events.containsKey(e.getKey()))
-					newT.put(e.getKey(), oldTransaction.events.get(e.getKey()));
-			transactions.set(i, newT);
+					newTransaction.put(e.getKey(), oldTransaction.events.get(e.getKey()));
+			this.transactions.set(i, newTransaction);
 		}
 	}
 	private void generateTable()
@@ -2367,7 +2408,7 @@ class AlgorithmTTFE extends Algorithm
 			if (ul != null && ul.elements.size() > 0)
 				listOfULists.add(ul);
 		}
-		int[] prefix = new int[BUFFERS_SIZE];
+		int[] prefix = new int[InitialBufferSize];
 		thui(prefix, 0, null, listOfULists);
 		mapItemToUList.clear();
 	}
