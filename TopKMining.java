@@ -217,29 +217,38 @@ class Formatter
 
 class Parser
 {
+	private static final double DefaultDeltaRatio = 0.7;
 	private static final LogLevel DefaultLogLevel = LogLevel.Info;
 	private static final int DefaultMaximumTransactionCount = Integer.MAX_VALUE;
 	private static final int DefaultRunCount = 10;
+	private static final int DefaultStartingTransactionID = 1;
 	private static final String[] HelpArguments = { "?", "/?", "-?", "h", "/h", "-h", "help", "/help", "--help" };
-	private static final String[] DatasetArguments = { "d", "/d", "-d", "dataset", "/dataset", "--dataset" };
+	private static final String[] DeltaRatioArguments = {"d", "/d", "-d", "deltaRatio", "/deltaRatio", "--deltaRatio" };
+	private static final String[] InputFilePathArguments = { "i", "/i", "-i", "inputFilePath", "/inputFilePath", "--inputFilePath" };
 	private static final String[] LogLevelArguments = { "l", "/l", "-l", "logLevel", "/logLevel", "--logLevel" };
 	private static final String[] MaximumTransactionCountArguments = { "m", "/m", "-m", "maximumTransactionCount", "/maximumTransactionCount", "--maximumTransactionCount" };
-	private static final String[] OutputFilePathArguments = { "o", "/o", "-o", "output", "/output", "--output" };
+	private static final String[] OutputFilePathArguments = { "o", "/o", "-o", "outputFilePath", "/outputFilePath", "--outputFilePath" };
 	private static final String[] RunCountArguments = { "r", "/r", "-r", "runCount", "/runCount", "--runCount" };
+	private static final String[] StartingTransactionIDArguments = { "s", "/s", "-s", "startingTransactionID", "/startingTransactionID", "--startingTransactionID" };
 	
-	private String warnings = null;
-	private String traces = null;
-	private String logs = null;
-	private boolean exitFlag = false;
-	private String dataset = null;
+	private LinkedHashMap<LogLevel, StringBuffer> logMessages = null;
+	private double deltaRatio = DefaultDeltaRatio;
+	private String inputFilePath = null;
 	private LogLevel logLevel = LogLevel.Info;
-	private int maximumTransactionCount = DefaultMaximumTransactionCount;
+	private Number maximumTransactionCount = DefaultMaximumTransactionCount;
 	private String outputFilePath = null;
 	private int runCount = DefaultRunCount;
+	private Number startingTransactionID = DefaultStartingTransactionID;
 	
 	public Parser()
 	{
-		
+		this.logMessages = new LinkedHashMap<LogLevel, StringBuffer>();
+		this.logMessages.put(LogLevel.Trace, null);
+		this.logMessages.put(LogLevel.Debug, null);
+		this.logMessages.put(LogLevel.Info, null);
+		this.logMessages.put(LogLevel.Warning, null);
+		this.logMessages.put(LogLevel.Error, null);
+		this.logMessages.put(LogLevel.Fatal, null);
 	}
 	private static boolean containing(final String[] array, final String target)
 	{
@@ -265,106 +274,57 @@ class Parser
 		System.out.println("This is a runCountner for multiple top-$k$ mining algorithms. ");
 		System.out.println();
 		System.out.println("Options:");
-		System.out.println("\t" + Formatter.array2String(HelpArguments) + "\t\tPrint the help warnings.");
-		System.out.println("\t" + Formatter.array2String(DatasetArguments) + " <dataset>\t\tSpecify the dataset. ");
+		System.out.println("\t" + Formatter.array2String(HelpArguments) + "\t\tPrint this help document. ");
+		System.out.println(
+			"\t" + Formatter.array2String(DeltaRatioArguments) + " <deltaRatio>\t\tSpecify the delta ratio for static threshold algorithms, "
+			+ "which should be a ratio within the interval $[0, 1]$. The default value is " + DefaultDeltaRatio + ". "
+		);
+		System.out.println("\t" + Formatter.array2String(InputFilePathArguments) + " <inputFilePath>\t\tSpecify the input file path to the dataset. ");
 		System.out.println(
 			"\t" + Formatter.array2String(LogLevelArguments) + " <level>\t\tSpecify the log level from "
 			+ LogLevel.All + " to " + LogLevel.Off + ". The default value is " + DefaultLogLevel + ". "
 		);
-		System.out.println("\t" + Formatter.array2String(MaximumTransactionCountArguments) + " <maximumTransactionCount>\t\tSpecify the maximum transaction count. ");
-		System.out.println("\t" + Formatter.array2String(OutputFilePathArguments) + " <output>\t\tSpecify the output. ");
-		System.out.println("\t" + Formatter.array2String(RunCountArguments) + " <runCount>\t\tSpecify the runCount count to repeat. The default value is " + DefaultRunCount + ". ");
+		System.out.println(
+			"\t" + Formatter.array2String(MaximumTransactionCountArguments) + " <maximumTransactionCount>\t\tSpecify the maximum transaction count, "
+			+ "which can be a positive integer or a decimal ratio within the interval $(0, 1)$. The default value is " + DefaultMaximumTransactionCount + ". "
+		);
+		System.out.println("\t" + Formatter.array2String(OutputFilePathArguments) + " <outputFilePath>\t\tSpecify the output file path. ");
+		System.out.println(
+			"\t" + Formatter.array2String(RunCountArguments) + " <runCount>\t\tSpecify the run count to repeat, which should be a positive integer. The default value is " + DefaultRunCount + ". "
+		);
+		System.out.println(
+			"\t" + Formatter.array2String(StartingTransactionIDArguments) + " <startingTransactionID>\t\tSpecify the starting transaction ID, "
+			+ "which can be a positive integer or a decimal ratio within the interval $(0, 1)$. The default value is " + DefaultStartingTransactionID + ". "
+		);
 		System.out.println();
 		System.out.println("Notes:");
 		System.out.println(
 			"\t1) All arguments are optional and processed sequentially. If the same argument is provided multiple times, "
-			+ "the last valid one will overwrite previous ones. Unrecognized or invalid arguments will be skipped with a warning. "
+			+ "the last valid one will silently overwrite previous ones. Unrecognized or invalid arguments will be skipped with an aggregated warning. "
 		);
-		System.out.println("\t2) Each unrecognized line in the dataset will be skipped with a warning. ");
+		System.out.println("\t2) The $\\delta_0$ will be set to $0$ if the borrowed oracle threshold $\\delta^*$ becomes negative after being multiplied by the delta ratio. ");
 		System.out.println(
-			"\t3) If the output is not provided, the result will be printed to the console. "
-			+ "The parent directory for the output will be automatically created if the output is a file path and its parent directory does not exist. "
+			"\t3) The input file path to the dataset must be specified. "
+			+ "Each unrecognized line in the dataset will be skipped with an aggregated warning and not count for the starting transaction ID or the maximum transaction count. "
+		);
+		System.out.println(
+			"\t4) If the output file path is not specified or exceptions occur when saving to the output file path, the results will be printed to the console. "
+			+ "The parent directory for the output file path will be automatically created if its parent directory does not exist. "
 		);
 		System.out.println();
 		return;
 	}
-	private boolean parseLogLevel(final String string)
+	private boolean appendMessage(final LogLevel level, final String message)
 	{
-		if (null == string || string.isEmpty())
-			return false;
+		if (level instanceof LogLevel && message instanceof String && !message.isEmpty())
+		{
+			if (!this.logMessages.containsKey(level) || !(this.logMessages.get(level) instanceof StringBuffer))
+				this.logMessages.put(level, new StringBuffer("Parser: "));
+			this.logMessages.get(level).append(message);
+			return true;
+		}
 		else
-			switch ((byte)string.charAt(0))
-			{
-			case 'A':
-			case 'a':
-				this.logLevel = LogLevel.All;
-				return true;
-			case 'T':
-			case 't':
-				this.logLevel = LogLevel.Trace;
-				return true;
-			case 'D':
-			case 'd':
-				this.logLevel = LogLevel.Debug;
-				return true;
-			case 'I':
-			case 'i':
-				this.logLevel = LogLevel.Info;
-				return true;
-			case 'W':
-			case 'w':
-				this.logLevel = LogLevel.Warning;
-				return true;
-			case 'E':
-			case 'e':
-				this.logLevel = LogLevel.Error;
-				return true;
-			case 'F':
-			case 'f':
-				this.logLevel = LogLevel.Fatal;
-				return true;
-			case 'O':
-			case 'o':
-				this.logLevel = LogLevel.Off;
-				return true;
-			default:
-				final byte lowerBound = LogLevel.All.getValue(), upperBound = LogLevel.Off.getValue();
-				if (0 <= lowerBound && lowerBound <= upperBound && upperBound <= 9)
-				{
-					final byte x = (byte)(string.charAt(0) >= '0' ? string.charAt(0) - '0' : string.charAt(0));
-					switch (x)
-					{
-					case 0:
-						this.logLevel = LogLevel.All;
-						return true;
-					case 1:
-						this.logLevel = LogLevel.Trace;
-						return true;
-					case 2:
-						this.logLevel = LogLevel.Debug;
-						return true;
-					case 3:
-						this.logLevel = LogLevel.Info;
-						return true;
-					case 4:
-						this.logLevel = LogLevel.Warning;
-						return true;
-					case 5:
-						this.logLevel = LogLevel.Error;
-						return true;
-					case 6:
-						this.logLevel = LogLevel.Fatal;
-						return true;
-					case 7:
-						this.logLevel = LogLevel.Off;
-						return true;
-					default:
-						return false;
-					}
-				}
-				else
-					return false;
-			}
+			return false;
 	}
 	private Number parseRealNumber(final String string)
 	{
@@ -378,8 +338,7 @@ class Parser
 				}
 				catch (Throwable e)
 				{
-					final String warning = "Parsed " + Formatter.escapeString(realNumberString) + " as null due to " + Formatter.escapeString(e) + ". ";
-					this.warnings = this.warnings instanceof String ? this.warnings + warning : "Parser: " + warning;
+					this.appendMessage(LogLevel.Warning, "Parsed " + Formatter.escapeString(string) + " as null due to " + Formatter.escapeString(e) + ". ");
 					return null;
 				}
 			else
@@ -567,134 +526,261 @@ class Parser
 					if (isOverflowed)
 						issues.add("an overflow signal captured");
 					if (issues.isEmpty())
-					{
-						final String trace = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + ". ";
-						this.traces = this.traces instanceof String ? this.traces + trace : "Parser: " + trace;
-					}
+						this.appendMessage(LogLevel.Trace, "Parsed " + Formatter.escapeString(string) + " as " + number + ". ");
 					else
-					{
-						final String warning = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + " with " + Formatter.arrayList2String(issues) + ". ";
-						this.warnings = this.warnings instanceof String ? this.warnings + warning : "Parser: " + warning;
-					}
+						this.appendMessage(
+							LogLevel.Warning, "Parsed " + Formatter.escapeString(string) + " as " + number + " with " + Formatter.arrayList2String(issues) + ". "
+						);
 				}
 				else
-				{
-					final String trace = "Parsed " + Formatter.escapeString(realNumberString) + " as " + number + ". ";
-					this.traces = this.traces instanceof String ? this.traces + trace : "Parser: " + trace;
-				}
+					this.appendMessage(LogLevel.Trace, "Parsed " + Formatter.escapeString(string) + " as " + number + ". ");
 				return number;
 			}
 		}
 		else
 			return null;
 	}
-	public boolean parseArguments(final String[] arguments, final boolean resetBeforeParsing)
+	private boolean parseLogLevel(final String string)
 	{
-		this.warnings = null;
-		this.traces = null;
-		this.logs = null;
-		this.exitFlag = false;
+		if (null == string || string.isEmpty())
+			return false;
+		else
+			switch ((byte)string.charAt(0))
+			{
+			case 'A':
+			case 'a':
+				this.logLevel = LogLevel.All;
+				return true;
+			case 'T':
+			case 't':
+				this.logLevel = LogLevel.Trace;
+				return true;
+			case 'D':
+			case 'd':
+				this.logLevel = LogLevel.Debug;
+				return true;
+			case 'I':
+			case 'i':
+				this.logLevel = LogLevel.Info;
+				return true;
+			case 'W':
+			case 'w':
+				this.logLevel = LogLevel.Warning;
+				return true;
+			case 'E':
+			case 'e':
+				this.logLevel = LogLevel.Error;
+				return true;
+			case 'F':
+			case 'f':
+				this.logLevel = LogLevel.Fatal;
+				return true;
+			case 'O':
+			case 'o':
+				this.logLevel = LogLevel.Off;
+				return true;
+			default:
+				final byte lowerBound = LogLevel.All.getValue(), upperBound = LogLevel.Off.getValue();
+				if (0 <= lowerBound && lowerBound <= upperBound && upperBound <= 9)
+				{
+					final byte x = (byte)(string.charAt(0) >= '0' ? string.charAt(0) - '0' : string.charAt(0));
+					switch (x)
+					{
+					case 0:
+						this.logLevel = LogLevel.All;
+						return true;
+					case 1:
+						this.logLevel = LogLevel.Trace;
+						return true;
+					case 2:
+						this.logLevel = LogLevel.Debug;
+						return true;
+					case 3:
+						this.logLevel = LogLevel.Info;
+						return true;
+					case 4:
+						this.logLevel = LogLevel.Warning;
+						return true;
+					case 5:
+						this.logLevel = LogLevel.Error;
+						return true;
+					case 6:
+						this.logLevel = LogLevel.Fatal;
+						return true;
+					case 7:
+						this.logLevel = LogLevel.Off;
+						return true;
+					default:
+						return false;
+					}
+				}
+				else
+					return false;
+			}
+	}
+	public boolean parseArguments(final String[] arguments, final boolean resetBeforeParsing) // the return value indicates whether to exit the whole program due to ``help`` option
+	{
+		for (Map.Entry<LogLevel, StringBuffer> entry : this.logMessages.entrySet()) // reset all messages
+			entry.setValue(null);
 		if (resetBeforeParsing)
 		{
-			this.dataset = null;
+			this.deltaRatio = DefaultDeltaRatio;
+			this.inputFilePath = null;
 			this.logLevel = DefaultLogLevel;
 			this.maximumTransactionCount = DefaultMaximumTransactionCount;
 			this.outputFilePath = null;
 			this.runCount = DefaultRunCount;
+			this.startingTransactionID = DefaultStartingTransactionID;
 		}
-		boolean missingArgument = false;
-		ArrayList<Integer> invalidArgumentIndexes = new ArrayList<Integer>();
-		for (int i = 0; i < arguments.length; ++i)
+		if (arguments instanceof String[])
 		{
-			if (null == arguments[i])
-				invalidArgumentIndexes.add(i);
-			else if (containing(HelpArguments, arguments[i]))
+			ArrayList<Integer> invalidArgumentIndexes = new ArrayList<Integer>();
+			boolean missingArgument = false;
+			for (int i = 0; i < arguments.length; ++i)
 			{
-				printHelp();
-				this.exitFlag = true;
-				return true;
-			}
-			else if (containing(DatasetArguments, arguments[i]))
-				if (++i < arguments.length)
-					this.dataset = arguments[i];
-				else
-					missingArgument = true;
-			else if (containing(LogLevelArguments, arguments[i]))
-				if (++i < arguments.length)
-					if (this.parseLogLevel(arguments[i]))
-						if (this.traces instanceof String)
-							this.traces += "Parsed " + Formatter.escapeString(arguments[i]) + " as " + this.logLevel + ". ";
+				if (null == arguments[i])
+					invalidArgumentIndexes.add(i);
+				else if (containing(HelpArguments, arguments[i]))
+				{
+					printHelp();
+					return true;
+				}
+				else if (containing(DeltaRatioArguments, arguments[i]))
+					if (++i < arguments.length)
+					{
+						final Number number = this.parseRealNumber(arguments[i]);
+						if (number instanceof Double)
+						{
+							final double doubleValue = number.doubleValue();
+							if (0 <= doubleValue && doubleValue <= 1)
+								this.deltaRatio = doubleValue;
+							else
+								invalidArgumentIndexes.add(i);
+						}
 						else
-							this.traces = "Parser: Parsed " + Formatter.escapeString(arguments[i]) + " as " + this.logLevel + ". ";
+							invalidArgumentIndexes.add(i);
+					}
 					else
-						invalidArgumentIndexes.add(i);
-				else
-					missingArgument = true;
-			else if (containing(MaximumTransactionCountArguments, arguments[i]))
-				if (++i < arguments.length)
-				{
-					final Number number = this.parseRealNumber(arguments[i]);
-					if (number instanceof Integer && (int)number >= 1)
-						this.maximumTransactionCount = (int)number;
+						missingArgument = true;
+				else if (containing(InputFilePathArguments, arguments[i]))
+					if (++i < arguments.length)
+						this.inputFilePath = arguments[i];
 					else
-						invalidArgumentIndexes.add(i);
-				}
-				else
-					missingArgument = true;
-			else if (containing(OutputFilePathArguments, arguments[i]))
-				if (++i < arguments.length)
-					this.outputFilePath = arguments[i];
-				else
-					missingArgument = true;
-			else if (containing(RunCountArguments, arguments[i]))
-				if (++i < arguments.length)
-				{
-					final Number number = this.parseRealNumber(arguments[i]);
-					if (number instanceof Integer && (int)number >= 1)
-						this.runCount = (int)number;
+						missingArgument = true;
+				else if (containing(LogLevelArguments, arguments[i]))
+					if (++i < arguments.length)
+						if (this.parseLogLevel(arguments[i]))
+							this.appendMessage(LogLevel.Trace, "Parsed " + Formatter.escapeString(arguments[i]) + " as " + this.logLevel + ". ");
+						else
+							invalidArgumentIndexes.add(i);
 					else
-						invalidArgumentIndexes.add(i);
-				}
+						missingArgument = true;
+				else if (containing(MaximumTransactionCountArguments, arguments[i]))
+					if (++i < arguments.length)
+					{
+						final Number number = this.parseRealNumber(arguments[i]);
+						if (number instanceof Integer)
+						{
+							final int intValue = number.intValue();
+							if (intValue >= 1)
+								this.maximumTransactionCount = intValue;
+							else
+								invalidArgumentIndexes.add(i);
+						}
+						else if (number instanceof Double)
+						{
+							final double doubleValue = number.doubleValue();
+							if (0 < doubleValue && doubleValue < 1)
+								this.maximumTransactionCount = doubleValue;
+							else
+								invalidArgumentIndexes.add(i);
+						}
+						else
+							invalidArgumentIndexes.add(i);
+					}
+					else
+						missingArgument = true;
+				else if (containing(OutputFilePathArguments, arguments[i]))
+					if (++i < arguments.length)
+						this.outputFilePath = arguments[i];
+					else
+						missingArgument = true;
+				else if (containing(RunCountArguments, arguments[i]))
+					if (++i < arguments.length)
+					{
+						final Number number = this.parseRealNumber(arguments[i]);
+						if (number instanceof Integer)
+						{
+							final int intValue = number.intValue();
+							if (intValue >= 1)
+								this.runCount = intValue;
+							else
+								invalidArgumentIndexes.add(i);
+						}
+						else
+							invalidArgumentIndexes.add(i);
+					}
+					else
+						missingArgument = true;
+				else if (containing(StartingTransactionIDArguments, arguments[i]))
+					if (++i < arguments.length)
+					{
+						final Number number = this.parseRealNumber(arguments[i]);
+						if (number instanceof Integer)
+						{
+							final int intValue = number.intValue();
+							if (intValue >= 1)
+								this.startingTransactionID = intValue;
+							else
+								invalidArgumentIndexes.add(i);
+						}
+						else if (number instanceof Double)
+						{
+							final double doubleValue = number.doubleValue();
+							if (0 < doubleValue && doubleValue < 1)
+								this.startingTransactionID = doubleValue;
+							else
+								invalidArgumentIndexes.add(i);
+						}
+						else
+							invalidArgumentIndexes.add(i);
+					}
+					else
+						missingArgument = true;
 				else
-					missingArgument = true;
-			else
-				invalidArgumentIndexes.add(i);
+					invalidArgumentIndexes.add(i);
+			}
+			final int invalidArgumentCount = invalidArgumentIndexes.size();
+			if (1 == invalidArgumentCount)
+				this.appendMessage(
+					LogLevel.Warning, "The argument whose index is [" + invalidArgumentIndexes.get(0)
+					+ "] could not be recognized, which has been skipped. Please note that [0] is the first user argument, not the executable, JAR, or Java source path. "
+				);
+			else if (invalidArgumentCount >= 2)
+				this.appendMessage(
+					LogLevel.Warning, "" + invalidArgumentCount + " arguments, whose indexes are " + Formatter.arrayList2String(invalidArgumentIndexes, "[", "]")
+					+ ", could not be recognized, which have been skipped. Please note that [0] is the first user argument, not the executable, JAR, or Java source path. "
+				);
+			if (missingArgument)
+				this.appendMessage(LogLevel.Warning, "The corresponding value for the last argument is missing. ");
+			this.appendMessage(
+				LogLevel.Debug, "Parsed the delta ratio as " + this.deltaRatio + ", the input file path as " + Formatter.escapeString(this.inputFilePath)
+				+ ", the log level as " + this.logLevel + ", the maximum transaction count as " + this.maximumTransactionCount + ", the output file path as "
+				+ Formatter.escapeString(this.outputFilePath) + ", the run count as " + this.runCount + ", and the starting transaction ID as " + this.startingTransactionID + ". "
+			);
 		}
-		StringBuilder sb = new StringBuilder();
-		if (missingArgument)
-			sb.append("The corresponding value for the last argument is missing. ");
-		final int invalidArgumentCount = invalidArgumentIndexes.size();
-		if (1 == invalidArgumentCount)
-			sb.append("The argument whose index is [").append(invalidArgumentIndexes.get(0))
-				.append("] could not be recognized, which has been skipped. Please note that [0] is the first user argument, not the executable, JAR, or Java source path. ");
-		else if (invalidArgumentCount >= 2)
-			sb.append(invalidArgumentCount).append(" arguments, whose indexes are ").append(Formatter.arrayList2String(invalidArgumentIndexes, "[", "]"))
-				.append(", could not be recognized, which have been skipped. Please note that [0] is the first user argument, not the executable, JAR, or Java source path. ");
-		if (sb.length() >= 1)
-			this.warnings = null == this.warnings || this.warnings.isEmpty() ? "Parser: " + sb.toString() : this.warnings + sb.toString();
-		sb.setLength(0);
-		sb.append("Parsed the dataset as ").append(Formatter.escapeString(this.dataset)).append(". Parsed the maximum transaction count as ").append(this.maximumTransactionCount)
-			.append(". Parsed the output file path as ").append(Formatter.escapeString(this.outputFilePath)).append(". Parsed the run count as ").append(this.runCount).append(". ");
-		if (sb.length() >= 1)
-			this.logs = null == this.logs || this.logs.isEmpty() ? "Parser: " + sb.toString() : this.logs + sb.toString();
-		return this.dataset != null && !this.dataset.isEmpty() && this.runCount >= 1;
+		else
+			this.appendMessage(LogLevel.Error, "Skipped parsing arguments due to a null argument array passed. ");
+		return false;
 	}
 	public boolean parseArguments(String[] arguments) { return this.parseArguments(arguments, true); }
-	public boolean getExitFlag()
+	public LinkedHashMap<LogLevel, String> getMessages()
 	{
-		return this.exitFlag;
-	}
-	public String getWarnings()
-	{
-		return this.warnings;
-	}
-	public String getTraces()
-	{
-		return this.traces;
-	}
-	public String getLogs()
-	{
-		return this.logs;
+		LinkedHashMap<LogLevel, String> messages = new LinkedHashMap<LogLevel, String>();
+		for (Map.Entry<LogLevel, StringBuffer> entry : this.logMessages.entrySet())
+			if (entry.getValue() instanceof StringBuffer)
+				messages.put(entry.getKey(), entry.getValue().toString());
+		return messages;
 	}
 	public static LogLevel getDefaultLogLevel()
 	{
@@ -704,17 +790,25 @@ class Parser
 	{
 		return this.logLevel;
 	}
-	public String getDataset()
+	public String getInputFilePath()
 	{
-		return this.dataset;
+		return this.inputFilePath;
 	}
-	public int getMaximumTransactionCount()
+	public double getDeltaRatio()
 	{
-		return this.maximumTransactionCount;
+		return this.deltaRatio;
 	}
 	public int getRunCount()
 	{
 		return this.runCount;
+	}
+	public Number getStartingTransactionID()
+	{
+		return this.startingTransactionID;
+	}
+	public Number getMaximumTransactionCount()
+	{
+		return this.maximumTransactionCount;
 	}
 	public String getOutputFilePath()
 	{
@@ -868,7 +962,7 @@ abstract class Algorithm implements Serializable
 		}
 		return false;
 	}
-	public abstract Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount);
+	public abstract Number[] runAlgorithm(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount);
 	public abstract ArrayList<ArrayList<Integer>> getTopKPatterns();
 	public abstract ArrayList<Double> getTopKValues();
 }
@@ -1043,8 +1137,8 @@ class AlgorithmTHUI extends Algorithm
 	static private int DefaultColumnIndex = 2;
 	
 	private int columnIndex = DefaultColumnIndex;
-	private boolean strategyPruning = true, strategy_ETF = false, strategy_LETF_E = false, strategy_LETF_LB = false;
-	private final ArrayList<Transaction> transactions = new ArrayList<>();
+	private boolean strategy_ETF = false, strategy_LETF_E = false, strategy_LETF_LB = false, strategyPruning = true;
+	private final ArrayList<Transaction> transactions = new ArrayList<Transaction>();
 	private LinkedHashMap<Integer, Double> TWTF = new LinkedHashMap<>();
 	private int[] sequence = null;
 	private ItemEvent[] itemEvents = null;
@@ -1082,8 +1176,12 @@ class AlgorithmTHUI extends Algorithm
 		finalResults.offer(htfe);
 		while (this.finalResults.size() > this.k)
 			this.finalResults.poll();
-		if (this.strategyPruning && this.finalResults.size() >= this.k)
-			this.delta = this.finalResults.peek().eetf;
+		if (this.strategyPruning)
+		{
+			if (this.finalResults.size() >= this.k)
+				this.delta = this.finalResults.peek().eetf;
+			this.logger.print("Algorithm" + this.algorithmName + ": The $\\delta$ has been raised to " + this.delta + " in the final mining procedure. ", LogLevel.Trace);
+		}
 	}
 	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
 	{
@@ -1158,7 +1256,7 @@ class AlgorithmTHUI extends Algorithm
 	}
 	
 	/* Main procedures */
-	private boolean loadDataset(final String inputFilePath, final int maximumTransactionCount)
+	private boolean loadDataset(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
 	{
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(inputFilePath), StandardCharsets.UTF_8)))
 		{
@@ -1189,9 +1287,7 @@ class AlgorithmTHUI extends Algorithm
 								}
 								transaction.ttf = transactionUtility;
 								transaction.tid = ++tid;
-								transactions.add(transaction);
-								if (tid >= maximumTransactionCount)
-									break;
+								this.transactions.add(transaction);
 							}
 							catch (Throwable e)
 							{
@@ -1202,6 +1298,63 @@ class AlgorithmTHUI extends Algorithm
 					}
 					else
 						colonWarningFlag = true;
+				}
+			}
+			if (this.transactions.isEmpty())
+				this.logger.print(
+					"Algorithm" + this.algorithmName + ": No transactions were collected from " + Formatter.escapeString(inputFilePath) + ". ", LogLevel.Warning
+				);
+			else
+			{
+				final int originalTransactionCount = this.transactions.size(), offset = this.transactions.get(0).tid; // ``offset`` indicates the first transaction ID in ``this.transactions``
+				int leftClosing = 0, rightOpening = originalTransactionCount;
+				if (startingTransactionID instanceof Integer)
+				{
+					final int intValue = startingTransactionID.intValue();
+					if (intValue >= offset)
+						leftClosing = Math.min(intValue, originalTransactionCount) - offset;
+				}
+				else if (startingTransactionID instanceof Double)
+				{
+					final double doubleValue = startingTransactionID.doubleValue();
+					if (0 < doubleValue && doubleValue < 1)
+						leftClosing = (int)(doubleValue * originalTransactionCount) - offset; // ``doubleValue`` must be the left operand of the operator ``*``
+				}
+				leftClosing = Math.max(leftClosing, 0);
+				if (maximumTransactionCount instanceof Integer)
+				{
+					final int intValue = maximumTransactionCount.intValue();
+					if (intValue >= offset)
+						rightOpening = Math.max(leftClosing + intValue, 0);
+				}
+				else if (maximumTransactionCount instanceof Double)
+				{
+					final double doubleValue = maximumTransactionCount.doubleValue();
+					if (0 < doubleValue && doubleValue < 1)
+						rightOpening = Math.max(leftClosing + (int)(doubleValue * rightOpening), 0); // ``doubleValue`` must be the left operand of the operator ``*``
+				}
+				rightOpening = Math.min(rightOpening, this.transactions.size());
+				this.transactions.subList(rightOpening, this.transactions.size()).clear();
+				this.transactions.subList(0, leftClosing).clear();
+				if (this.transactions.isEmpty())
+					this.logger.print(
+						"Algorithm" + this.algorithmName + ": Collected " + originalTransactionCount + " transaction(s) from " + Formatter.escapeString(inputFilePath)
+						+ ". However, no transactions remain after the crop operation. ", LogLevel.Warning
+					);
+				else
+				{
+					final int transactionSize = this.transactions.size();
+					if (transactionSize > 1)
+						this.logger.print(
+							"Algorithm" + this.algorithmName + ": Collected " + originalTransactionCount + " transaction(s) from " + Formatter.escapeString(inputFilePath)
+							+ ". After cropping (if specified), " + transactionSize + " transactions remain, where, the first and the last transaction IDs are "
+							+ this.transactions.get(0).tid + " and " + this.transactions.get(transactionSize - 1).tid + ", respectively. ", LogLevel.Debug
+						);
+					else
+						this.logger.print(
+							"Algorithm" + this.algorithmName + ": Collected " + originalTransactionCount + " transaction(s) from " + Formatter.escapeString(inputFilePath)
+							+ ". After cropping (if specified), only the transaction, whose transaction ID is " + this.transactions.get(0).tid + ", remains. ", LogLevel.Debug
+						);
 				}
 			}
 			if (colonWarningFlag)
@@ -1271,12 +1424,16 @@ class AlgorithmTHUI extends Algorithm
 		ETF.clear();
 		for (Map.Entry<Integer, Double> e : list)
 			ETF.put(e.getKey(), e.getValue());
-		if (strategy_ETF && !list.isEmpty())
+		if (strategy_ETF)
 		{
-			int idx = Math.min(this.k, list.size()) - 1;
-			double tmp = list.get(idx).getValue();
-			if (tmp > delta)
-				delta = tmp;
+			if (!list.isEmpty())
+			{
+				int idx = Math.min(this.k, list.size()) - 1;
+				double tmp = list.get(idx).getValue();
+				if (tmp > delta)
+					delta = tmp;
+			}
+			this.logger.print("Algorithm" + this.algorithmName + ": The $\\delta$ has been raised to " + this.delta + " in the ``sortETF`` procedure. ", LogLevel.Trace);
 		}
 	}
 	private void pruneItem()
@@ -1378,6 +1535,7 @@ class AlgorithmTHUI extends Algorithm
 			if (letf_e.size() >= this.k && letf_e.peek() > delta)
 				delta = letf_e.peek();
 		}
+		this.logger.print("Algorithm" + this.algorithmName + ": The $\\delta$ has been raised to " + this.delta + " in the ``raiseThreshold_LETF_E`` procedure. ", LogLevel.Trace);
 	}
 	private void raiseThreshold_LETF_LB()
 	{
@@ -1406,6 +1564,7 @@ class AlgorithmTHUI extends Algorithm
 			if (letf_lb.size() >= this.k && letf_lb.peek() > delta)
 				delta = letf_lb.peek();
 		}
+		this.logger.print("Algorithm" + this.algorithmName + ": The $\\delta$ has been raised to " + this.delta + " in the ``raiseThreshold_LETF_LB`` procedure. ", LogLevel.Trace);
 	}
 	private void mineWithUtilityLists()
 	{
@@ -1452,9 +1611,9 @@ class AlgorithmTHUI extends Algorithm
 		mapItemToUList.clear();
 	}
 	@Override
-	public Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount)
+	public Number[] runAlgorithm(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
 	{
-		if (this.loadDataset(inputFilePath, maximumTransactionCount))
+		if (this.loadDataset(inputFilePath, startingTransactionID, maximumTransactionCount) && this.checkMemory())
 			try
 			{
 				final long startTime = System.nanoTime();
@@ -1536,21 +1695,21 @@ class AlgorithmTHUFI extends Algorithm
 		super("THUFI", _alpha, _beta, _delta, _k, _logger);
 	}
 	@Override
-	public Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount)
+	public Number[] runAlgorithm(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
 	{
 		final long startTime = System.nanoTime();
 		
 		/* Utility */
 		final AlgorithmTHUI utilityAlgorithm = new AlgorithmTHUI(this.alpha, this.beta, this.delta, this.k, this.logger);
 		utilityAlgorithm.setColumnIndex(1);
-		final Number[] utilityMetrics = utilityAlgorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
+		final Number[] utilityMetrics = utilityAlgorithm.runAlgorithm(inputFilePath, startingTransactionID, maximumTransactionCount);
 		final ArrayList<ArrayList<Integer>> utilityTopKPatterns = utilityAlgorithm.getTopKPatterns();
 		final ArrayList<Double> utilityTopKValues = utilityAlgorithm.getTopKValues();
 		
 		/* Frequency */
 		final AlgorithmTHUI frequencyAlgorithm = new AlgorithmTHUI(this.alpha, this.beta, this.delta, this.k, this.logger);
 		frequencyAlgorithm.setColumnIndex(2);
-		final Number[] frequencyMetrics = frequencyAlgorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
+		final Number[] frequencyMetrics = frequencyAlgorithm.runAlgorithm(inputFilePath, startingTransactionID, maximumTransactionCount);
 		final ArrayList<ArrayList<Integer>> frequencyTopKPatterns = frequencyAlgorithm.getTopKPatterns();
 		final ArrayList<Double> frequencyTopKValues = frequencyAlgorithm.getTopKValues();
 		
@@ -1814,7 +1973,7 @@ class AlgorithmTTFE extends Algorithm
 		}
 	}
 	
-	boolean strategyPruning = true, strategy_ETF = true, strategy_LETF_E = true, strategy_LETF_LB = true;
+	boolean strategy_ETF = true, strategy_LETF_E = true, strategy_LETF_LB = true, strategyPruning = true;
 	ArrayList<Transaction> transactions = new ArrayList<>();
 	private LinkedHashMap<Integer, Double> TWTF = new LinkedHashMap<>();
 	private int[] sequence = null;
@@ -1837,7 +1996,7 @@ class AlgorithmTTFE extends Algorithm
 	}
 	
 	/* Child procedures */
-	void savePattern(int[] prefix, final int length, UList X)
+	private void savePattern(int[] prefix, final int length, UList X)
 	{
 		ArrayList<Integer> seq = new ArrayList<>();
 		for (int i = 0; i < length; ++i)
@@ -1847,8 +2006,12 @@ class AlgorithmTTFE extends Algorithm
 		finalResults.offer(htfe);
 		while (this.finalResults.size() > this.k)
 			this.finalResults.poll();
-		if (this.strategyPruning && this.finalResults.size() >= this.k)
-			this.delta = this.finalResults.peek().eetf;
+		if (this.strategyPruning)
+		{
+			if (this.finalResults.size() >= this.k)
+				this.delta = this.finalResults.peek().eetf;
+			this.logger.print("Algorithm" + this.algorithmName + ": The $\\delta$ has been raised to " + this.delta + " in the final mining procedure. ", LogLevel.Trace);
+		}
 	}
 	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
 	{
@@ -1923,7 +2086,7 @@ class AlgorithmTTFE extends Algorithm
 	}
 	
 	/* Main procedures */
-	boolean loadDataset(final String inputFilePath, final int maximumTransactionCount)
+	boolean loadDataset(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
 	{
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(inputFilePath), StandardCharsets.UTF_8)))
 		{
@@ -1957,9 +2120,7 @@ class AlgorithmTTFE extends Algorithm
 								}
 								transaction.ttf = ttf;
 								transaction.tid = ++tid;
-								transactions.add(transaction);
-								if (tid >= maximumTransactionCount)
-									break;
+								this.transactions.add(transaction);
 							}
 							catch (Throwable e)
 							{
@@ -2020,7 +2181,7 @@ class AlgorithmTTFE extends Algorithm
 			for (int i = 0; i < sequence.length; ++i)
 				if (t.events.containsKey(sequence[i]))
 				{
-					for (int j = i + 1; j < sequence.length; j++)
+					for (int j = i + 1; j < sequence.length; ++j)
 						if (t.events.containsKey(sequence[j]))
 							t.events.get(sequence[i]).rtf += t.events.get(sequence[j]).tf;
 					events[i].transactions.put(t.tid, t.events.get(sequence[i]));
@@ -2039,12 +2200,16 @@ class AlgorithmTTFE extends Algorithm
 		ETF.clear();
 		for (Map.Entry<Integer, Double> e : list)
 			ETF.put(e.getKey(), e.getValue());
-		if (strategy_ETF && !list.isEmpty())
+		if (strategy_ETF)
 		{
-			int idx = Math.min(this.k, list.size()) - 1;
-			double tmp = list.get(idx).getValue();
-			if (tmp > delta)
-				delta = tmp;
+			if (!list.isEmpty())
+			{
+				int idx = Math.min(this.k, list.size()) - 1;
+				double tmp = list.get(idx).getValue();
+				if (tmp > this.delta)
+					this.delta = tmp;
+			}
+			this.logger.print("Algorithm" + this.algorithmName + ": The $\\delta$ has been raised to " + this.delta + " in the ``sortETF`` procedure. ", LogLevel.Trace);
 		}
 	}
 	private void pruneItem()
@@ -2138,6 +2303,7 @@ class AlgorithmTTFE extends Algorithm
 			if (letf_e.size() >= this.k && letf_e.peek() > delta)
 				delta = letf_e.peek();
 		}
+		this.logger.print("Algorithm" + this.algorithmName + ": The $\\delta$ has been raised to " + this.delta + " in the ``raiseThreshold_LETF_E`` procedure. ", LogLevel.Trace);
 	}
 	private void raiseThreshold_LETF_LB()
 	{
@@ -2164,6 +2330,7 @@ class AlgorithmTTFE extends Algorithm
 			if (letf_lb.size() >= this.k && letf_lb.peek() > delta)
 				delta = letf_lb.peek();
 		}
+		this.logger.print("Algorithm" + this.algorithmName + ": The $\\delta$ has been raised to " + this.delta + " in the ``raiseThreshold_LETF_LB`` procedure. ", LogLevel.Trace);
 	}
 	private void mineWithEnumerationTree()
 	{
@@ -2205,9 +2372,9 @@ class AlgorithmTTFE extends Algorithm
 		mapItemToUList.clear();
 	}
 	@Override
-	public Number[] runAlgorithm(final String inputFilePath, final int maximumTransactionCount)
+	public Number[] runAlgorithm(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
 	{
-		if (this.loadDataset(inputFilePath, maximumTransactionCount))
+		if (this.loadDataset(inputFilePath, startingTransactionID, maximumTransactionCount) && this.checkMemory())
 			try
 			{
 				final long startTime = System.nanoTime();
@@ -2271,6 +2438,7 @@ class AlgorithmGUMM extends AlgorithmTTFE
 		this.strategy_ETF = false;
 		this.strategy_LETF_E = false;
 		this.strategy_LETF_LB = false;
+		this.strategyPruning = false;
 	}
 }
 
@@ -2603,118 +2771,112 @@ public class TopKMining
 	public static void main(final String[] arguments)
 	{
 		final Parser parser = new Parser();
-		boolean flag = parser.parseArguments(arguments);
-		if (parser.getExitFlag())
+		if (parser.parseArguments(arguments))
 			System.exit(EXIT_SUCCESS);
 		else
 		{
-			final String warnings = parser.getWarnings(), traces = parser.getTraces(), logs = parser.getLogs();
+			final LinkedHashMap<LogLevel, String> messages = parser.getMessages();
 			final Logger logger = new Logger(parser.getLogLevel());
-			if (warnings != null && !warnings.isEmpty())
-				logger.print(warnings, LogLevel.Warning);
-			if (traces != null && !traces.isEmpty())
-				logger.print(traces, LogLevel.Trace);
-			if (logs != null && !logs.isEmpty())
-				logger.print(logs, LogLevel.Debug);
-			if (flag)
+			for (Map.Entry<LogLevel, String> entry : messages.entrySet())
+			{
+				final String message = entry.getValue();
+				if (message instanceof String && !message.isEmpty())
+					logger.print(entry.getValue(), entry.getKey());
+			}
+			final String inputFilePath = parser.getInputFilePath();
+			if (inputFilePath instanceof String)
 			{
 				/* Parameters */
-				LinkedHashMap<String, Function<Number[], Algorithm>> algorithms = new LinkedHashMap<>();
-				algorithms.put("THUFI", parameters -> new AlgorithmTHUFI((double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
-				algorithms.put("GUMM", parameters -> new AlgorithmGUMM((double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
-				algorithms.put("TTFE", parameters -> new AlgorithmTTFE((double)parameters[0], (double)parameters[1], (Double)parameters[2], (int)parameters[3], logger));
-				final double[] alphaValues = { 0, 0.25, 0.5, 0.75, 1 };
-				final double[] alphaValue = { 0.5 };
-				final double[] deltaValues = { Double.NEGATIVE_INFINITY };
+				Object[][] parameters = {
+					{ "THUFI", 0.5, 0.5 }, { "TTFE", 0, 1 }, { "TTFE", 0.25, 0.75 }, { "TTFE", 0.5, 0.5 }, 
+					{ "TTFE", 0.75, 0.25 }, { "TTFE", 1, 0 }, { "GUMM", 0.5, 0.5 }
+				};
 				final int[] kValues = { 5, 10, 50, 100, 500, 1000, 5000, 10000 };
 				
 				/* Algorithms */
-				Number[] parameters = new Number[] { null, null, null, Double.NEGATIVE_INFINITY };
-				String[] columns = { "Dataset", "Algorithm", "$\\alpha$", "$\\beta$", "$\\delta_0$", "$k$", "Run count", "Time consumption (ns)", "Memory consumption (B)", "$\\delta^*$" };
+				final String[] columns = {
+					"Dataset", "Algorithm", "$\\alpha$", "$\\beta$", "$\\delta_0$", "$k$", "Run count", "Time consumption (ns)", "Memory consumption (B)", "$\\delta^*$"
+				};
 				final int length = columns.length, metricLength = 3;
-				Object[][] results = new Object[algorithms.size() * alphaValues.length * deltaValues.length * kValues.length][length];
+				Object[][] results = new Object[parameters.length * kValues.length][length];
 				int outerIndex = 0;
-				final String inputFilePath = parser.getDataset();
 				final String datasetName = Formatter.filterMainFileName(inputFilePath);
-				final int maximumTransactionCount = parser.getMaximumTransactionCount(), runCount = parser.getRunCount();
+				LinkedHashMap<String, Function<Integer, Double>> deltaFactory = new LinkedHashMap<String, Function<Integer, Double>>();
+				deltaFactory.put("THUFI", (Function<Integer, Double>)x -> Double.NEGATIVE_INFINITY);
+				deltaFactory.put("TTFE", (Function<Integer, Double>)x -> Double.NEGATIVE_INFINITY);
+				deltaFactory.put("GUMM", (Function<Integer, Double>)x -> ((Number)results[x - 3 * kValues.length][length - 1]).doubleValue() * parser.getDeltaRatio());
+				final int runCount = parser.getRunCount();
+				LinkedHashMap<String, Function<Number[], Algorithm>> algorithmFactory = new LinkedHashMap<String, Function<Number[], Algorithm>>();
+				algorithmFactory.put("THUFI", numbers -> new AlgorithmTHUFI(numbers[0].doubleValue(), numbers[1].doubleValue(), numbers[2].doubleValue(), numbers[3].intValue(), logger));
+				algorithmFactory.put("TTFE", numbers -> new AlgorithmTTFE(numbers[0].doubleValue(), numbers[1].doubleValue(), numbers[2].doubleValue(), numbers[3].intValue(), logger));
+				algorithmFactory.put("GUMM", numbers -> new AlgorithmGUMM(numbers[0].doubleValue(), numbers[1].doubleValue(), numbers[2].doubleValue(), numbers[3].intValue(), logger));
+				final Number startingTransactionID = parser.getStartingTransactionID(), maximumTransactionCount = parser.getMaximumTransactionCount();
+				boolean flag = true;
 				Saver saver = new Saver(parser.getOutputFilePath(), columns, logger);
-				for (Map.Entry<String, Function<Number[], Algorithm>> entry : algorithms.entrySet())
-				{
-					final String algorithmName = entry.getKey();
-					final Function<Number[], Algorithm> algorithmFactory = entry.getValue();
-					for (final double alpha : ("TTFE" == algorithmName ? alphaValues : alphaValue))
+				for (Object[] parameter : parameters)
+					for (final int k : kValues)
 					{
-						parameters[0] = alpha;
-						final double beta = 1 - alpha;
-						parameters[1] = beta;
-						for (final double delta : deltaValues)
+						int innerIndex = 0;
+						results[outerIndex][innerIndex++] = datasetName;
+						results[outerIndex][innerIndex++] = parameter[0];
+						results[outerIndex][innerIndex++] = parameter[1];
+						results[outerIndex][innerIndex++] = parameter[2];
+						final double delta = deltaFactory.get(parameter[0]).apply(outerIndex);
+						results[outerIndex][innerIndex++] = delta;
+						results[outerIndex][innerIndex++] = k;
+						results[outerIndex][innerIndex++] = runCount;
+						final Number[] numbers = { ((Number)parameter[1]).doubleValue(), ((Number)parameter[2]).doubleValue(), delta, k };
+						Algorithm algorithm = algorithmFactory.get(parameter[0]).apply(numbers);
+						Number[] result = algorithm.runAlgorithm(inputFilePath, startingTransactionID, maximumTransactionCount);
+						if (result != null && result.length == metricLength)
 						{
-							parameters[2] = delta;
-							for (final int k : kValues)
+							for (int run = 2; run < runCount; ++run)
 							{
-								int innerIndex = 0;
-								results[outerIndex][innerIndex++] = datasetName; results[outerIndex][innerIndex++] = algorithmName;
-								results[outerIndex][innerIndex++] = alpha; results[outerIndex][innerIndex++] = beta;
-								results[outerIndex][innerIndex++] = delta; results[outerIndex][innerIndex++] = k;
-								results[outerIndex][innerIndex++] = runCount;
-								parameters[3] = k;
-								Algorithm algorithm = algorithmFactory.apply(parameters);
-								Number[] result = algorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
-								if (null == result || result.length != metricLength)
+								algorithm = algorithmFactory.get(parameter[0]).apply(numbers);
+								Number[] r = algorithm.runAlgorithm(inputFilePath, startingTransactionID, maximumTransactionCount);
+								if (r != null && r.length == metricLength)
+								{
 									for (int i = 0; i < metricLength; ++i)
 										results[outerIndex][innerIndex++] = null;
+									break;
+								}
 								else
 								{
-									for (int run = 2; run < runCount; ++run)
-									{
-										algorithm = algorithmFactory.apply(parameters);
-										Number[] r = algorithm.runAlgorithm(inputFilePath, maximumTransactionCount);
-										if (null == r || r.length != metricLength)
-										{
-											for (int i = 0; i < metricLength; ++i)
-												results[outerIndex][innerIndex++] = null;
-											break;
-										}
-										else
-										{
-											result[0] = checkComplexity(result[0]) ? (long)result[0] + (long)r[0] : null;
-											result[1] = checkComplexity(result[1]) ? (long)result[1] + (long)r[1] : null;
-											if (!checkDelta(result[2], r[2]))
-												result[2] = null;
-										}	
-									}
-									if (checkComplexity(result[0]))
-										if ((long)result[0] % runCount == 0)
-											results[outerIndex][innerIndex++] = (long)result[0] / runCount;
-										else
-											results[outerIndex][innerIndex++] = BigDecimal.valueOf(result[0].doubleValue() / runCount).toPlainString();
-									else
-									{
-										results[outerIndex][innerIndex++] = null;
-										flag = false;
-									}
-									if (checkComplexity(result[1]))
-										if ((long)result[1] % runCount == 0)
-											results[outerIndex][innerIndex++] = (long)result[1] / runCount;
-										else
-											results[outerIndex][innerIndex++] = BigDecimal.valueOf(result[1].doubleValue() / runCount).toPlainString();
-									else
-									{
-										results[outerIndex][innerIndex++] = null;
-										flag = false;
-									}
-									results[outerIndex][innerIndex++] = (Double)result[2];
-								}
-								saver.save(results, 0, ++outerIndex);
+									result[0] = checkComplexity(result[0]) ? (long)result[0] + (long)r[0] : null;
+									result[1] = checkComplexity(result[1]) ? (long)result[1] + (long)r[1] : null;
+									if (!checkDelta(result[2], r[2]))
+										result[2] = null;
+								}	
 							}
+							if (checkComplexity(result[0]))
+								if ((long)result[0] % runCount == 0)
+									results[outerIndex][innerIndex++] = (long)result[0] / runCount;
+								else
+									results[outerIndex][innerIndex++] = BigDecimal.valueOf(result[0].doubleValue() / runCount).toPlainString();
+							else
+							{
+								results[outerIndex][innerIndex++] = null;
+								flag = false;
+							}
+							if (checkComplexity(result[1]))
+								if ((long)result[1] % runCount == 0)
+									results[outerIndex][innerIndex++] = (long)result[1] / runCount;
+								else
+									results[outerIndex][innerIndex++] = BigDecimal.valueOf(result[1].doubleValue() / runCount).toPlainString();
+							else
+							{
+								results[outerIndex][innerIndex++] = null;
+								flag = false;
+							}
+							results[outerIndex][innerIndex++] = (Double)result[2];
 						}
+						saver.save(results, 0, ++outerIndex);
 					}
-				}
 				System.exit(flag ? EXIT_SUCCESS : EXIT_FAILURE);
 			}
 			else
 			{
-				logger.print("A path to the dataset must be specified. ", LogLevel.Fatal);
+				logger.print("The input file path to the dataset must be specified. ", LogLevel.Fatal);
 				System.exit(EOF);
 			}
 		}

@@ -305,8 +305,11 @@ jobs:
           echo "The current working directory is \"$(pwd)\". "
           if [[ -f "${{ matrix.dataset }}" ]];
           then
-            echo "\$ java TopKMining.java -d \"${{ matrix.dataset }}\" -l Trace -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
-            java TopKMining.java -d "${{ matrix.dataset }}" -l Trace -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+            echo "\$ java TopKMining.java -h"
+            java TopKMining.java -h
+            echo ""
+            echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+            java TopKMining.java -i "${{ matrix.dataset }}" -l Debug -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
           else
             echo "Could not test on the dataset \"${{ matrix.dataset }}\" via Java. "
             tree
