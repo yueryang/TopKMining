@@ -85,7 +85,7 @@ More experimental options and file operations are provided.
 #### TTFE_v4
 
 Extended experiments are merged. More systematic debugging outputs are provided. 
-**Data should be cut according to a fixed ratio if it is hard to test GUMM due to the limitation of computing memory. **
+**Data should be cropped according to a fixed ratio if it is hard to test GUMM due to the limitation of computing memory. **
 
 #### TTFE_v5 (soft link)
 
@@ -103,16 +103,30 @@ This a set of algorithms downloaded from the [SPMF](https://www.philippe-fournie
 
 ## Datasets
 
-The following eight famous datasets are included. 
+Eight famous datasets are included. The dataset name, the transaction count, the overall event count, the average event count, 
+the overall TTF, the average TTF, the maximum TTF, and the minimum TTF for each dataset are shown as follows. 
 
-- accidents
-- chess
-- connect
-- kosarak
-- mushroom
-- pumsb
-- pumsb_star
-- retail
+| Dataset | Transaction count | Average event count | Event count range | Average TTF | TTF range |
+| - | - | - | - | - | - |
+| accidents | $340183$ | $33.81$ | $51 - 18 = 33$ | $262.98$ | $636.5 - (-45.0) = 681.5$ |
+| chess | $3196$ | $37.00$ | $37 - 37 = 0$ | $271.59$ | $529.0 - 44.0 = 485.0$ |
+| connect | $67557$ | $43.00$ | $43 - 43 = 0$ | $1010.15$ | $1565.5 - 428.0 = 1137.5$ |
+| kosarak | $837206$ | $8.40$ | $2497 - 2 = 2495$ | $84.02$ | $21931.0 - (-115.0) = 22046.0$ |
+| mushroom | $8124$ | $23.00$ | $23 - 23 = 0$ | $263.36$ | $471.5 - 28.5 = 443.0$ |
+| pumsb | $30417$ | $74.00$ | $74 - 74 = 0$ | $1739.30$ | $2405.0 - 1094.5 = 1310.5$ |
+| pumsb_star | $30417$ | $50.10$ | $62 - 49 = 13$ | $2254.46$ | $3388.0 - 1541.0 = 1847.0$ |
+| retail | $87985$ | $10.29$ | $76 - 1 = 75$ | $241.39$ | $2174.0 - (-42.5) = 2216.5$ |
+
+According to our experience, some datasets are recommended to be cropped according to a ratio. 
+Related information after being cropped is provided as follows. 
+
+| Dataset | Ratio | Transaction count | Average event count | Event count range | Average TTF | TTF range |
+| - | - | - | - | - | - | - |
+| accidents | $0.01$ | $3401$ | $33.84$ | $45 - 24 = 21$ | $273.42$ | $543.0 - 11.5 = 531.5$ |
+| kosarak | $10$ | $10$ | $3.6$ | $8 - 2 = 6$ | $36.5$ | $154.5 - (-12.0) = 166.5$ |
+| pumsb | $0.001$ | $30$ | $74.0$ | $74 - 74 = 0$ | $1742.73$ | $2086.0 - 1441.5 = 644.5$ |
+| pumsb_star | $0.01$ | $304$ | $49.91$ | $55 - 49 = 6$ | $2242.06$ | $2757.0 - 1789.0 = 968.0$ |
+| retail | $0.01$ | $879$ | $8.55$ | $52 - 1 = 51$ | $199.38$ | $1054.5 - (-22.0) = 1076.5$ |
 
 Example datasets like ``sample.txt`` used for algorithm debugging, testing, and tracking are also proposed. 
 A Python script entitled ``datasetExtender.py`` is designed to extend multiple 1-dimensional datasets to one multi-dimensional dataset. 

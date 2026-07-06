@@ -495,7 +495,7 @@ def main() -> int:
 		print()
 		successCount = drawers.draw(
 			getMarker = lambda x:{"THUFI":'^', "GUMM":'s', "TTFE":'o'}.get(x[0]), 
-			getColor = lambda x:{0:"purple", 0.25:"blue", 0.5:"cyan", 0.75:"green", 1:"brown"}.get(x[1]) if "TTFE" == x[0] else {"THUFI":"red", "GUMM":"orange"}.get(x[0]), 
+			getColor = lambda x:{0:"orange", 0.25:"purple", 0.5:"blue", 0.75:"cyan", 1:"green"}.get(x[1]) if "TTFE" == x[0] else {"THUFI":"red", "GUMM":"brown"}.get(x[0]), 
 			getLabel = lambda x:"{0} ($\\alpha = {1}$)".format(x[0], x[1])
 		)
 		resultLaTeXFilePath = "Outputs/summaries.tex"

@@ -1270,7 +1270,7 @@ class AlgorithmTHUI extends Algorithm<AlgorithmTHUI.Transaction>
 			seq.add(prefix[i]);
 		seq.add(X.item);
 		HTFE htfe = new HTFE(seq, X.sumIutils);
-		finalResults.offer(htfe);
+		this.finalResults.offer(htfe);
 		while (this.finalResults.size() > this.k)
 			this.finalResults.poll();
 		if (this.strategyPruning)
@@ -2041,7 +2041,7 @@ class AlgorithmTTFE extends Algorithm<AlgorithmTTFE.Transaction>
 			seq.add(prefix[i]);
 		seq.add(X.item);
 		HTFE htfe = new HTFE(seq, X.sumIutils);
-		finalResults.offer(htfe);
+		this.finalResults.offer(htfe);
 		while (this.finalResults.size() > this.k)
 			this.finalResults.poll();
 		if (this.strategyPruning)
