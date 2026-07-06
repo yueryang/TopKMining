@@ -1,10 +1,11 @@
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -897,7 +898,7 @@ class Logger
 
 abstract class Algorithm<T extends Algorithm.Transaction> implements Serializable
 {
-	abstract static class Transaction implements Serializable
+	static class Transaction implements Serializable
 	{
 		int tid = 0;
 		double ttf = 0.0;
@@ -911,6 +912,25 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 			return 0;
 		}
 	};
+	private static class CountingOutputStream extends OutputStream
+	{
+		private long count = 0L;
+		
+		@Override
+		public void write(int b) throws IOException
+		{
+			++this.count;
+		}
+		@Override
+		public void write(byte[] b, int off, int len) throws IOException
+		{
+        		this.count += len;
+		}
+		public long size()
+		{
+			return this.count;
+		}
+	}
 	
 	private static final double DefaultAlpha = 0.5, DefaultBeta = 0.5, DefaultDelta = Double.NEGATIVE_INFINITY;
 	private static final int DefaultK = 10;
@@ -922,7 +942,7 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 	transient Logger logger = null;
 	ArrayList<T> transactions = null;
 	boolean strategy_ETF = true, strategy_LETF_E = true, strategy_LETF_LB = true, strategyPruning = true;
-	transient long peakMemory = 0L;
+	transient long localMemory = 0L, peakMemory = 0L;
 	
 	Algorithm(final String _algorithmName, final double _alpha, final double _beta, final double _delta, final int _k, final Logger _logger)
 	{
@@ -1050,15 +1070,19 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 				this.logger.print("Algorithm" + this.algorithmName + ": " + statistics + this.tell(inputFilePath, "After cropping, selected "), LogLevel.Debug);
 		}
 	}
+	static final long getObjectSize(final Object object) throws IOException
+	{
+		final CountingOutputStream countingOutputStream = new CountingOutputStream();
+		final ObjectOutputStream objectOutputStream = new ObjectOutputStream(countingOutputStream);
+		objectOutputStream.writeObject(object);
+		objectOutputStream.close();
+		return countingOutputStream.size();
+	}
 	final boolean checkMemory()
 	{
 		try
 		{
-			final ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-			final ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
-			objectOutputStream.writeObject(this);
-			objectOutputStream.close();
-			final long currentMemory = byteArrayOutputStream.size();
+			final long currentMemory = getObjectSize(this) + this.localMemory;
 			if (currentMemory > this.peakMemory)
 			{
 				this.peakMemory = currentMemory;
@@ -1067,7 +1091,7 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 		}
 		catch (Throwable e)
 		{
-			this.logger.print("Algorithm: Failed to check memory due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
+			this.logger.print("Algorithm" + this.algorithmName + ": Failed to check memory due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
 		}
 		return false;
 	}
@@ -1282,6 +1306,11 @@ class AlgorithmTHUI extends Algorithm<AlgorithmTHUI.Transaction>
 	}
 	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
 	{
+		try
+		{
+			this.localMemory += getObjectSize(pUL) + getObjectSize(ULs);
+		}
+		catch (Throwable e) {}
 		for (int i = ULs.size() - 1; i >= 0; --i)
 		{
 			UList X = ULs.get(i);
@@ -1297,7 +1326,7 @@ class AlgorithmTHUI extends Algorithm<AlgorithmTHUI.Transaction>
 				for (int j = i + 1; j < ULs.size(); ++j)
 				{
 					UList Y = ULs.get(j);
-					candidateCount++;
+					++candidateCount;
 					UList ex = construct(pUL, X, Y);
 					if (ex != null)
 						exULs.add(ex);
@@ -2053,6 +2082,11 @@ class AlgorithmTTFE extends Algorithm<AlgorithmTTFE.Transaction>
 	}
 	private void thui(int[] prefix, int prefixLength, UList pUL, ArrayList<UList> ULs)
 	{
+		try
+		{
+			this.localMemory += getObjectSize(pUL) + getObjectSize(ULs);
+		}
+		catch (Throwable e) {}
 		for (int i = ULs.size() - 1; i >= 0; --i)
 		{
 			UList X = ULs.get(i);

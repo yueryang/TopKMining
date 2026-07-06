@@ -122,6 +122,7 @@ Related information after being cropped is provided as follows.
 
 | Dataset | Ratio | Transaction count | Average event count | Event count range | Average TTF | TTF range |
 | - | - | - | - | - | - | - |
+| accidents | $0.05$ | $17009$ | $45 - 20 = 25$ | $274.11$ | $568.5 - 11.5 = 557.0$ |
 | accidents | $0.01$ | $3401$ | $33.84$ | $45 - 24 = 21$ | $273.42$ | $543.0 - 11.5 = 531.5$ |
 | kosarak | $10$ | $10$ | $3.6$ | $8 - 2 = 6$ | $36.5$ | $154.5 - (-12.0) = 166.5$ |
 | pumsb | $0.001$ | $30$ | $74.0$ | $74 - 74 = 0$ | $1742.73$ | $2086.0 - 1441.5 = 644.5$ |
