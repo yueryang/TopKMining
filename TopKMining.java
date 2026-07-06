@@ -218,7 +218,7 @@ class Formatter
 
 class Parser
 {
-	private static final double DefaultDeltaRatio = 0.7;
+	private static final double DefaultDeltaRatio = 0.75;
 	private static final LogLevel DefaultLogLevel = LogLevel.Info;
 	private static final int DefaultMaximumTransactionCount = Integer.MAX_VALUE;
 	private static final int DefaultRunCount = 10;
@@ -1308,7 +1308,7 @@ class AlgorithmTHUI extends Algorithm<AlgorithmTHUI.Transaction>
 	{
 		try
 		{
-			this.localMemory += getObjectSize(pUL) + getObjectSize(ULs);
+			this.localMemory += getObjectSize(prefix) + getObjectSize(pUL) + getObjectSize(ULs);
 		}
 		catch (Throwable e) {}
 		for (int i = ULs.size() - 1; i >= 0; --i)
@@ -2084,7 +2084,7 @@ class AlgorithmTTFE extends Algorithm<AlgorithmTTFE.Transaction>
 	{
 		try
 		{
-			this.localMemory += getObjectSize(pUL) + getObjectSize(ULs);
+			this.localMemory += getObjectSize(prefix) + getObjectSize(pUL) + getObjectSize(ULs);
 		}
 		catch (Throwable e) {}
 		for (int i = ULs.size() - 1; i >= 0; --i)
