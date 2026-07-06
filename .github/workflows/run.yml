@@ -284,6 +284,7 @@ jobs:
           echo "Run count: ${runCount}"
           echo "Time string: ${timeString}"
           echo "Output file path: ${outputFilePath}"
+          echo "mainFileName=${mainFileName}" >> "${GITHUB_OUTPUT}"
           echo "javaVersion=${javaVersion}" >> "${GITHUB_OUTPUT}"
           echo "runCount=${runCount}" >> "${GITHUB_OUTPUT}"
           echo "outputFilePath=${outputFilePath}" >> "${GITHUB_OUTPUT}"
@@ -308,8 +309,24 @@ jobs:
             echo "\$ java TopKMining.java -h"
             java TopKMining.java -h
             echo ""
-            echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -m 0.001 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
-            java TopKMining.java -i "${{ matrix.dataset }}" -l Debug -m 0.001 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+            case "${{ steps.ready.outputs.mainFileName }}" in
+              "accidents"|"pumsb_star"|"retail")
+                echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -m 0.01 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+                java TopKMining.java -i "${{ matrix.dataset }}" -l Debug -m 0.01 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+                ;;
+              "kosarak")
+                echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -m 10 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+                java TopKMining.java -i "${{ matrix.dataset }}" -l Debug -m 10 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+                ;;
+              "pumsb")
+                echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -m 0.001 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+                java TopKMining.java -i "${{ matrix.dataset }}" -l Debug -m 0.001 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+                ;;
+              *)
+                echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+                java TopKMining.java -i "${{ matrix.dataset }}" -l Debug -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+                ;;
+            esac
           else
             echo "Could not test on the dataset \"${{ matrix.dataset }}\" via Java. "
             tree

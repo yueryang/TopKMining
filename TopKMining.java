@@ -217,7 +217,7 @@ class Formatter
 
 class Parser
 {
-	private static final double DefaultDeltaRatio = 0.75;
+	private static final double DefaultDeltaRatio = 0.7;
 	private static final LogLevel DefaultLogLevel = LogLevel.Info;
 	private static final int DefaultMaximumTransactionCount = Integer.MAX_VALUE;
 	private static final int DefaultRunCount = 10;
@@ -954,11 +954,11 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 		}
 		this.logger.print(
 			"Algorithm" + this.algorithmName + ": Initialized the " + this.algorithmName + " algorithm with $\\alpha = " + this.alpha
-			+ "$, $\\beta = " + this.beta + "$, $\\delta = " + String.valueOf(this.delta).replace("Infinity", "\\infty") + "$, and $k = " + this.k + ". ", 
+			+ "$, $\\beta = " + this.beta + "$, $\\delta = " + String.valueOf(this.delta).replace("Infinity", "\\infty") + "$, and $k = " + this.k + "$. ", 
 			LogLevel.Info
 		);
 	}
-	private String tell(final String inputFilePath, final String prefix)
+	private final String tell(final String inputFilePath, final String prefix)
 	{
 		final int transactionCount = this.transactions.size();
 		StringBuilder stringBuilder = new StringBuilder();
@@ -1005,7 +1005,7 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 			stringBuilder.append("No transactions were collected from ").append(Formatter.escapeString(inputFilePath)).append(". ");
 		return stringBuilder.toString();
 	}
-	void cropTransactions(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
+	final void cropTransactions(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
 	{
 		final String statistics = this.tell(inputFilePath, "Collected ");
 		if (this.transactions.isEmpty())
@@ -1681,7 +1681,7 @@ class AlgorithmTHUI extends Algorithm<AlgorithmTHUI.Transaction>
 				final long endTime = System.nanoTime();
 				return new Number[] { endTime - startTime, this.peakMemory, this.delta };
 			}
-			catch (NullPointerException e)//////////////////
+			catch (Throwable e)
 			{
 				this.logger.print("Algorithm" + this.algorithmName + ": Failed to execute the " + this.algorithmName + " algorithm due to " + Formatter.escapeString(e) + ". ", LogLevel.Error);
 			}
@@ -2072,6 +2072,13 @@ class AlgorithmTTFE extends Algorithm<AlgorithmTTFE.Transaction>
 					UList ex = construct(pUL, X, Y);
 					if (ex != null)
 						exULs.add(ex);
+				}
+				if (prefixLength >= prefix.length)
+				{
+					final int newSize = prefix.length << 1;
+					int[] newPrefix = new int[newSize];
+					System.arraycopy(prefix, 0, newPrefix, 0, prefix.length);
+					prefix = newPrefix;
 				}
 				prefix[prefixLength] = X.item;
 				thui(prefix, prefixLength + 1, X, exULs);
@@ -2845,7 +2852,10 @@ public class TopKMining
 				LinkedHashMap<String, Function<Integer, Double>> deltaFactory = new LinkedHashMap<String, Function<Integer, Double>>();
 				deltaFactory.put("THUFI", (Function<Integer, Double>)x -> Double.NEGATIVE_INFINITY);
 				deltaFactory.put("TTFE", (Function<Integer, Double>)x -> Double.NEGATIVE_INFINITY);
-				deltaFactory.put("GUMM", (Function<Integer, Double>)x -> ((Number)results[x - 3 * kValues.length][length - 1]).doubleValue() * parser.getDeltaRatio());
+				deltaFactory.put("GUMM", (Function<Integer, Double>)x -> (
+					results[x - 3 * kValues.length][length - 1] instanceof Double && ((Number)results[x - 3 * kValues.length][length - 1]).doubleValue() >= 0
+					? ((Number)results[x - 3 * kValues.length][length - 1]).doubleValue() * parser.getDeltaRatio() : 0.0
+				));
 				final int runCount = parser.getRunCount();
 				LinkedHashMap<String, Function<Number[], Algorithm>> algorithmFactory = new LinkedHashMap<String, Function<Number[], Algorithm>>();
 				algorithmFactory.put("THUFI", numbers -> new AlgorithmTHUFI(numbers[0].doubleValue(), numbers[1].doubleValue(), numbers[2].doubleValue(), numbers[3].intValue(), logger));
