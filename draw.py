@@ -1,5 +1,5 @@
 from os import makedirs, walk
-from os.path import abspath, dirname, isdir, isfile, islink, join, relpath, sep, split, splitext
+from os.path import abspath, basename, dirname, isdir, isfile, islink, join, relpath, sep, split, splitext
 from sys import argv, exit
 from subprocess import TimeoutExpired, run
 try:
@@ -129,75 +129,45 @@ class Drawers:
 	def __init__(self:object) -> object:
 		self.__filePaths = None
 		self.__summaries = None
-	def collect(self:object, fp:str|tuple|list, ext:str|tuple|list|set, extensionCaseSensitive:bool = False) -> int:
+	def collect(self:object, fp:str|tuple|list, ext:str|tuple|list|set, filter:object = lambda relativeFilePath:True, extensionCaseSensitive:bool = False) -> int:
 		stack, extensions = [ext], set()
-		if extensionCaseSensitive is True:
-			while stack:
-				element = stack.pop()
-				if isinstance(element, (tuple, list)):
-					stack.extend(reversed(element))
-				elif isinstance(element, set):
-					stack.extend(sorted(element, reverse = True))
-				elif isinstance(element, str):
-					extensions.add(element)
-		else:
-			while stack:
-				element = stack.pop()
-				if isinstance(element, (tuple, list)):
-					stack.extend(reversed(element))
-				elif isinstance(element, set):
-					stack.extend(sorted(element, reverse = True))
-				elif isinstance(element, str):
-					extensions.add(element.lower())
+		while stack:
+			element = stack.pop()
+			if isinstance(element, (tuple, list)):
+				stack.extend(reversed(element))
+			elif isinstance(element, set):
+				stack.extend(sorted(element, reverse = True))
+			elif isinstance(element, str):
+				extensions.add(element.lower() if extensionCaseSensitive is True else element) # trade a small increase in time complexity for the removal of a large amount of duplicated code
 		stack, self.__filePaths, baseExceptionDict = [fp], [], {}
-		if extensionCaseSensitive is True:
-			while stack:
-				element = stack.pop()
-				if isinstance(element, (tuple, list)):
-					stack.extend(reversed(element))
-				elif isinstance(element, set):
-					stack.extend(sorted(element, reverse = True))
-				elif isinstance(element, str) and not element in baseExceptionDict:
-					try:
-						if not islink(element):
-							if isdir(element):
-								for root, directoryNames, fileNames in walk(element):
-									for fileName in fileNames:
-										relativeFilePath = relpath(join(root, fileName))
-										if splitext(fileName)[1] in extensions and relativeFilePath not in self.__filePaths:
-											self.__filePaths.append(relativeFilePath)
-							elif isfile(element) and splitext(fileName)[1] in extensions:
-								relativeFilePath = relpath(element)
-								if relativeFilePath not in self.__filePaths:
-									self.__filePaths.append(relativeFilePath)
-					except BaseException as e:
-						baseExceptionDict[element] = e
-		else:
-			while stack:
-				element = stack.pop()
-				if isinstance(element, (tuple, list)):
-					stack.extend(reversed(element))
-				elif isinstance(element, set):
-					stack.extend(sorted(element, reverse = True))
-				elif isinstance(element, str) and not element in baseExceptionDict:
-					try:
-						if not islink(element):
-							if isdir(element):
-								filePaths = []
-								for root, directoryNames, fileNames in walk(element):
-									for fileName in fileNames:
-										relativeFilePath = relpath(join(root, fileName))
-										if splitext(fileName)[1].lower() in extensions and relativeFilePath not in self.__filePaths:
-											filePaths.append(relativeFilePath)
-								filePaths.sort()
-								self.__filePaths.extend(filePaths)
-								del filePaths
-							elif isfile(element) and splitext(element)[1].lower() in extensions:
-								relativeFilePath = relpath(element)
-								if relativeFilePath not in self.__filePaths:
-									self.__filePaths.append(relativeFilePath)
-					except BaseException as e:
-						baseExceptionDict[element] = e
+		while stack:
+			element = stack.pop()
+			if isinstance(element, (tuple, list)):
+				stack.extend(reversed(element))
+			elif isinstance(element, set):
+				stack.extend(sorted(element, reverse = True))
+			elif isinstance(element, str) and not element in baseExceptionDict:
+				try:
+					if not islink(element):
+						if isdir(element):
+							filePaths = []
+							for root, directoryNames, fileNames in walk(element):
+								for fileName in fileNames:
+									relativeFilePath = relpath(join(root, fileName))
+									if (
+										(splitext(fileName)[1].lower() if extensionCaseSensitive is True else splitext(fileName)[1]) in extensions
+										and filter(relativeFilePath) and relativeFilePath not in self.__filePaths
+									): # trade a small increase in time complexity for the removal of a large amount of duplicated code
+										filePaths.append(relativeFilePath)
+							filePaths.sort()
+							self.__filePaths.extend(filePaths)
+							del filePaths
+						elif isfile(element) and splitext(element)[1].lower() in extensions:
+							relativeFilePath = relpath(element)
+							if filter(relativeFilePath) and relativeFilePath not in self.__filePaths:
+								self.__filePaths.append(relativeFilePath)
+				except BaseException as e:
+					baseExceptionDict[element] = e
 		if baseExceptionDict:
 			print("Collected {0} file path(s) in {1} file type(s) with {2} base exception(s) {3}. ".format(len(self.__filePaths), len(extensions), len(baseExceptionDict), baseExceptionDict))
 		else:
@@ -490,7 +460,7 @@ class Drawers:
 
 def main() -> int:
 	drawers = Drawers()
-	totalCount = drawers.collect(argv[1:], {".csv", ".xlsx"})
+	totalCount = drawers.collect(argv[1:], {".csv", ".xlsx"}, filter = lambda relativeFilePath:splitext(basename(relativeFilePath))[0] not in {"sample"})
 	if totalCount >= 1 and Drawers.configure():
 		print()
 		successCount = drawers.draw(
