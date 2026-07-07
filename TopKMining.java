@@ -983,7 +983,7 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 			LogLevel.Info
 		);
 	}
-	private final String tell(final String inputFilePath, final String prefix)
+	private final String describe(final String inputFilePath)
 	{
 		final int transactionCount = this.transactions.size();
 		StringBuilder stringBuilder = new StringBuilder();
@@ -1007,37 +1007,63 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 				if (transaction.ttf < minimumTTF)
 					minimumTTF = transaction.ttf;
 			}
-			final double averageTransactionLength = (double)overallTransactionLength / transactionCount;
-			stringBuilder.append(prefix instanceof String ? prefix : "Collected ").append(transactionCount).append(" transactions and ").append(differentEvents.size())
-				.append(" different event(s) from ").append(Formatter.escapeString(inputFilePath)).append(", where, the first and the last transaction IDs are ")
-				.append(this.transactions.get(0).tid).append(" and ").append(this.transactions.get(transactionCount - 1).tid).append(", respectively. ");
-			stringBuilder.append("Each transaction contains about ").append(overallTransactionLength).append(" / ")
-				.append(transactionCount).append(" = ").append(averageTransactionLength).append(" event(s) on average");
+			final int differentEventCount = differentEvents.size();
+			String densityDescription = "";
+			if (inputFilePath instanceof String)
+				stringBuilder.append("Collected ").append(transactionCount).append(" transactions and ").append(differentEventCount)
+					.append(" different event(s) from ").append(Formatter.escapeString(inputFilePath));
+			else
+				stringBuilder.append("After cropping, ").append(transactionCount).append(" transactions and ")
+					.append(differentEventCount).append(" different event(s) remain");
+			stringBuilder.append(", where, the first and last transaction IDs are ").append(this.transactions.get(0).tid)
+				.append(" and ").append(this.transactions.get(transactionCount - 1).tid).append(", respectively. ");
+			if (overallTransactionLength % transactionCount == 0)
+			{
+				final int averageTransactionLength = overallTransactionLength / transactionCount;
+				stringBuilder.append("Each transaction contains $").append(overallTransactionLength).append(" / ")
+					.append(transactionCount).append(" = ").append(averageTransactionLength).append("$ event(s) on average");
+				if (100 * averageTransactionLength % differentEventCount == 0)
+					densityDescription = "The dataset density is " + (100 * averageTransactionLength / differentEventCount) + "%. ";
+				else
+					densityDescription = "The dataset density is about " + (100.0 * averageTransactionLength / differentEventCount) + "%. ";
+			}
+			else
+			{
+				final double averageTransactionLength = (double)overallTransactionLength / transactionCount;
+				stringBuilder.append("Each transaction contains about $").append(overallTransactionLength).append(" / ")
+					.append(transactionCount).append(" \\approx ").append(averageTransactionLength).append("$ event(s) on average");
+				densityDescription = "The dataset density is about " + (100.0 * averageTransactionLength / differentEventCount) + "%. ";
+			}
 			if (maximumTransactionLength >= minimumTransactionLength)
-				stringBuilder.append(", with a range of ").append(maximumTransactionLength).append(" - ")
-					.append(minimumTransactionLength).append(" = ").append(maximumTransactionLength - minimumTransactionLength).append(". ");
+				stringBuilder.append(", with a range of $").append(maximumTransactionLength).append(" - ")
+					.append(minimumTransactionLength).append(" = ").append(maximumTransactionLength - minimumTransactionLength).append("$. ");
 			else
 				stringBuilder.append(". ");
-			stringBuilder.append("The average TTF is ").append(overallTTF).append(" / ").append(transactionCount).append(" = ").append(overallTTF / transactionCount);
+			stringBuilder.append("The average TTF is about $").append(overallTTF).append(" / ").append(transactionCount).append(" \\approx ").append(overallTTF / transactionCount).append("$");
 			if (maximumTTF >= minimumTTF)
-				stringBuilder.append(", with a range of ").append(maximumTTF).append(" - ").append(minimumTTF < 0 ? "(" + minimumTTF + ")" : minimumTTF)
-					.append(" = ").append(maximumTTF - minimumTTF).append(". ");
+				stringBuilder.append(", with a range of $").append(maximumTTF).append(" - ").append(minimumTTF < 0 ? "(" + minimumTTF + ")" : minimumTTF)
+					.append(" = ").append(maximumTTF - minimumTTF).append("$. ");
 			else
 				stringBuilder.append(". ");
-			stringBuilder.append("The dataset density is about ").append(averageTransactionLength).append(" / ").append(differentEvents.size()).append(" = ")
-				.append(averageTransactionLength * 100 / differentEvents.size()).append("%. ");
+			stringBuilder.append(densityDescription);
 		}
 		else if (1 == transactionCount)
-			stringBuilder.append(prefix instanceof String ? prefix : "Collected ").append("1 transaction, whose transaction ID is ")
-				.append(this.transactions.get(0).tid).append(", from ").append(Formatter.escapeString(inputFilePath)).append(". This transaction contains ")
-				.append(this.transactions.get(0).size()).append("event(s). Its TTF is ").append(this.transactions.get(0).ttf).append(". The dataset density is 100%. ");
+		{
+			if (inputFilePath instanceof String)
+				stringBuilder.append("Collected 1 transaction, whose transaction ID is ").append(this.transactions.get(0).tid).append(", from ")
+					.append(Formatter.escapeString(inputFilePath)).append(". ");
+			else
+				stringBuilder.append("After cropping, 1 transaction, whose transaction ID is ").append(this.transactions.get(0).tid).append(", remains. ");
+			stringBuilder.append("This transaction contains ").append(this.transactions.get(0).size())
+				.append(" event(s). Its TTF is ").append(this.transactions.get(0).ttf).append(". The dataset density is 100%. ");
+		}
 		else
 			stringBuilder.append("No transactions were collected from ").append(Formatter.escapeString(inputFilePath)).append(". ");
 		return stringBuilder.toString();
 	}
 	final void cropTransactions(final String inputFilePath, final Number startingTransactionID, final Number maximumTransactionCount)
 	{
-		final String statistics = this.tell(inputFilePath, "Collected ");
+		final String statistics = this.describe(inputFilePath);
 		if (this.transactions.isEmpty())
 			this.logger.print("Algorithm" + this.algorithmName + ": " + statistics, LogLevel.Warning);
 		else
@@ -1075,9 +1101,9 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 			if (this.transactions.isEmpty())
 				this.logger.print("Algorithm" + this.algorithmName + ": " + statistics + "However, no transactions remain after the crop operation. ", LogLevel.Warning);
 			else if (this.transactions.size() == transactionCount)
-				this.logger.print("Algorithm" + this.algorithmName + ": " + statistics, LogLevel.Debug);
+				this.logger.print("Algorithm" + this.algorithmName + ": " + statistics, LogLevel.Info);
 			else
-				this.logger.print("Algorithm" + this.algorithmName + ": " + statistics + this.tell(inputFilePath, "After cropping, selected "), LogLevel.Debug);
+				this.logger.print("Algorithm" + this.algorithmName + ": " + statistics + this.describe(null), LogLevel.Info);
 		}
 	}
 	static final long getObjectSize(final Object object) throws IOException
@@ -2563,7 +2589,7 @@ class Saver
 		else
 		{
 			this.escapedOutputFilePath = Formatter.escapeString(this.outputFilePath);
-			this.logger.print("Saver: The results will be saved to " + this.escapedOutputFilePath + ". ", LogLevel.Debug);
+			this.logger.print("Saver: The saver has been initialized. The results will be saved to " + this.escapedOutputFilePath + ". ", LogLevel.Debug);
 		}
 		if (null == this.columns)
 			this.columns = new String[] {};

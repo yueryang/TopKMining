@@ -331,8 +331,8 @@ jobs:
                 java TopKMining.java -d 0.9 -i "${{ matrix.dataset }}" -l Debug -m 0.002 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
                 ;;
               "retail")
-                echo "\$ java TopKMining.java -d 0.9 -i \"${{ matrix.dataset }}\" -l Debug -m 0.005 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
-                java TopKMining.java -d 0.9 -i "${{ matrix.dataset }}" -l Debug -m 0.005 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+                echo "\$ java TopKMining.java -d 0.9 -i \"${{ matrix.dataset }}\" -l Debug -m 0.002 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+                java TopKMining.java -d 0.9 -i "${{ matrix.dataset }}" -l Debug -m 0.002 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
                 ;;
               *)
                 echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
