@@ -218,7 +218,7 @@ class Formatter
 
 class Parser
 {
-	private static final double DefaultDeltaRatio = 0.8;
+	private static final double DefaultDeltaRatio = 0.75;
 	private static final LogLevel DefaultLogLevel = LogLevel.Info;
 	private static final int DefaultMaximumTransactionCount = Integer.MAX_VALUE;
 	private static final int DefaultRunCount = 10;
