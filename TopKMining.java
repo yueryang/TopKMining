@@ -2873,7 +2873,7 @@ public class TopKMining
 					{ "THUFI", 0.5, 0.5 }, { "TTFE", 0, 1 }, { "TTFE", 0.25, 0.75 }, { "TTFE", 0.5, 0.5 }, 
 					{ "TTFE", 0.75, 0.25 }, { "TTFE", 1, 0 }, { "GUMM", 0.5, 0.5 }
 				};
-				final int[] kValues = { 1, 5, 10, 50, 100, 500, 1000, 5000 };
+				final int[] kValues = { 5, 10, 50, 100, 500, 1000, 5000, 10000 };
 				
 				/* Algorithms */
 				final String[] columns = {
