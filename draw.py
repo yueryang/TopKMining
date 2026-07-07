@@ -125,6 +125,11 @@ class Drawers:
 	__to_numeric = None
 	__plt = None
 	__ln = None
+	__escapeTEX = lambda x:"\\textbackslash{}".join(
+		string.replace("#", "\\#").replace("$", "\\$").replace("%", "\\%").replace("&", "\\&").replace("_", "\\_").replace("{", "\\{").replace("}", "\\}")
+		.replace("<", "\\textless{}").replace(">", "\\textgreater{}").replace("^", "\\textasciicircum{}").replace("~", "\\textasciitilde{}")
+		for string in "".join(character for character in str(x) if ' ' <= character <= '~').split("\\")
+	)
 	__DefaultCompilationTimeout = 10
 	def __init__(self:object) -> object:
 		self.__filePaths = None
@@ -338,7 +343,7 @@ class Drawers:
 				)
 			elif "memory" in metric.lower():
 				return (
-					"The memory consumption comparison results (in seconds) for different $k$ values when $\\alpha = \\beta = 0.5$. "
+					"The memory consumption comparison results (in MB) for different $k$ values when $\\alpha = \\beta = 0.5$. "
 					+ "The TTFE algorithm achieves the lowest memory consumption in most cases. "
 				)
 			elif "$\\delta^*$" == metric:
@@ -387,15 +392,23 @@ class Drawers:
 							algorithmNames = tuple(middleValue.keys())
 							break
 						independentVariableIndexes, algorithmCount = tuple(range(len(independentVariableValues))), len(algorithmNames)
-						f.write("\\begin{table*}[htbp]\n")
-						f.write("\t\\caption{{{0}. }}\n".format(getCaption(outerKey)))
-						tableLabel = []
-						for character in outerKey:
+						f.write("\\begin{table*}\n")
+						f.write("\t\\caption{{{0}}}\n".format(getCaption(outerKey)))
+						characterIndex, outerKeyLength, tableLabel = 0, len(outerKey), []
+						while characterIndex < outerKeyLength:
+							character = outerKey[characterIndex]
 							if '0' <= character <= '9' or 'A' <= character <= 'Z' or '_' == character or 'a' <= character <= 'z':
-								tableLabel.append(character)
-							else:
+								while characterIndex < outerKeyLength:
+									character = outerKey[characterIndex]
+									if '0' <= character <= '9' or 'A' <= character <= 'Z' or '_' == character or 'a' <= character <= 'z':
+										tableLabel.append(character)
+									else:
+										break
+									characterIndex += 1
 								break
-						f.write("\t\\label{{tab:{0}}}\n\t\\centering\n".format("".join(tableLabel).lower()))
+							characterIndex += 1
+						fullTableLabel = "\\label{{tab:{0}}}\n".format("".join(tableLabel).lower()) if tableLabel else ""
+						f.write("\t{0}\t\\centering\n".format(fullTableLabel))
 						f.write("\t\\resizebox{\\textwidth}{!}{\n\t\t\\begin{tabular}{" + "c" * (2 + len(independentVariableValues)) + "}\n\t\t\t\\toprule\n")
 						f.write("\t\t\t\\textbf{{{0}}} & \\textbf{{{1}}}".format(columnDataset, columnAlgorithm))
 						for independentVariableValue in independentVariableValues:
@@ -413,18 +426,18 @@ class Drawers:
 										optimalValue = matrix[rowIndex][independentVariableIndex]
 								for rowIndex in range(algorithmCount):
 									if optimalValue is None or not compare(optimalValue, matrix[rowIndex][independentVariableIndex]):
-										matrix[rowIndex][independentVariableIndex] = "\\textbf{{{0}}}".format(
+										matrix[rowIndex][independentVariableIndex] = "\\textbf{{${0}$}}".format(
 											formatValue(matrix[rowIndex][independentVariableIndex], outerKey)
 										)
 									else:
-										matrix[rowIndex][independentVariableIndex] = formatValue(matrix[rowIndex][independentVariableIndex], outerKey)
+										matrix[rowIndex][independentVariableIndex] = "${0}$".format(formatValue(matrix[rowIndex][independentVariableIndex], outerKey))
 							f.write("\t\t\t\\midrule\n")
 							emptyCell = False
 							for rowIndex, innerKey in enumerate(middleValue.keys()):
 								if emptyCell:
 									f.write("\t\t\t~ & ")
 								else:
-									f.write("\t\t\t\\multirow{{{0}}}{{*}}{{{1}}} & ".format(algorithmCount, middleKey))
+									f.write("\t\t\t\\multirow{{{0}}}{{*}}{{{1}}} & ".format(algorithmCount, Drawers.__escapeTEX(middleKey)))
 									emptyCell = True # mark the following cells before each of the following algorithms within this dataset as empty
 								f.write(str(innerKey))
 								for independentVariableIndex in independentVariableIndexes:
@@ -460,7 +473,7 @@ class Drawers:
 
 def main() -> int:
 	drawers = Drawers()
-	totalCount = drawers.collect(argv[1:], {".csv", ".xlsx"}, filter = lambda relativeFilePath:splitext(basename(relativeFilePath))[0] not in {"sample"})
+	totalCount = drawers.collect(argv[1:], {".csv", ".xlsx"}, filter = lambda relativeFilePath:not splitext(basename(relativeFilePath))[0].startswith("sample"))
 	if totalCount >= 1 and Drawers.configure():
 		print()
 		successCount = drawers.draw(
