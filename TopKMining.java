@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.function.Function;
@@ -911,6 +912,10 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 		{
 			return 0;
 		}
+		LinkedHashSet<Integer> keySet()
+		{
+			return new LinkedHashSet<Integer>();
+		}
 	};
 	private static class CountingOutputStream extends OutputStream
 	{
@@ -984,30 +989,33 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 		StringBuilder stringBuilder = new StringBuilder();
 		if (transactionCount >= 2)
 		{
-			int overallEventCount = 0, maximumTransactionEventCount = Integer.MIN_VALUE, minimumTransactionEventCount = Integer.MAX_VALUE;
+			LinkedHashSet<Integer> differentEvents = new LinkedHashSet<Integer>();
+			int overallTransactionLength = 0, maximumTransactionLength = Integer.MIN_VALUE, minimumTransactionLength = Integer.MAX_VALUE;
 			double overallTTF = 0.0, maximumTTF = Double.NEGATIVE_INFINITY, minimumTTF = Double.POSITIVE_INFINITY;
 			for (final Transaction transaction : this.transactions)
 			{
-				final int transactionEventCount = transaction.size();
-				overallEventCount += transactionEventCount;
-				if (transactionEventCount > maximumTransactionEventCount)
-					maximumTransactionEventCount = transactionEventCount;
-				if (transactionEventCount < minimumTransactionEventCount)
-					minimumTransactionEventCount = transactionEventCount;
+				differentEvents.addAll(transaction.keySet());
+				final int transactionLength = transaction.size();
+				overallTransactionLength += transactionLength;
+				if (transactionLength > maximumTransactionLength)
+					maximumTransactionLength = transactionLength;
+				if (transactionLength < minimumTransactionLength)
+					minimumTransactionLength = transactionLength;
 				overallTTF += transaction.ttf;
 				if (transaction.ttf > maximumTTF)
 					maximumTTF = transaction.ttf;
 				if (transaction.ttf < minimumTTF)
 					minimumTTF = transaction.ttf;
 			}
-			stringBuilder.append(prefix instanceof String ? prefix : "Collected ").append(transactionCount).append(" transactions from ")
-				.append(Formatter.escapeString(inputFilePath)).append(", where, the first and the last transaction IDs are ").append(this.transactions.get(0).tid)
-				.append(" and ").append(this.transactions.get(transactionCount - 1).tid).append(", respectively. ");
-			stringBuilder.append("Each transaction contains about ").append(overallEventCount).append(" / ")
-				.append(transactionCount).append(" = ").append((double)overallEventCount / transactionCount).append(" event(s) on average");
-			if (maximumTransactionEventCount >= minimumTransactionEventCount)
-				stringBuilder.append(", with a range of ").append(maximumTransactionEventCount).append(" - ")
-					.append(minimumTransactionEventCount).append(" = ").append(maximumTransactionEventCount - minimumTransactionEventCount).append(". ");
+			final double averageTransactionLength = (double)overallTransactionLength / transactionCount;
+			stringBuilder.append(prefix instanceof String ? prefix : "Collected ").append(transactionCount).append(" transactions and ").append(differentEvents.size())
+				.append(" different event(s) from ").append(Formatter.escapeString(inputFilePath)).append(", where, the first and the last transaction IDs are ")
+				.append(this.transactions.get(0).tid).append(" and ").append(this.transactions.get(transactionCount - 1).tid).append(", respectively. ");
+			stringBuilder.append("Each transaction contains about ").append(overallTransactionLength).append(" / ")
+				.append(transactionCount).append(" = ").append(averageTransactionLength).append(" event(s) on average");
+			if (maximumTransactionLength >= minimumTransactionLength)
+				stringBuilder.append(", with a range of ").append(maximumTransactionLength).append(" - ")
+					.append(minimumTransactionLength).append(" = ").append(maximumTransactionLength - minimumTransactionLength).append(". ");
 			else
 				stringBuilder.append(". ");
 			stringBuilder.append("The average TTF is ").append(overallTTF).append(" / ").append(transactionCount).append(" = ").append(overallTTF / transactionCount);
@@ -1016,11 +1024,13 @@ abstract class Algorithm<T extends Algorithm.Transaction> implements Serializabl
 					.append(" = ").append(maximumTTF - minimumTTF).append(". ");
 			else
 				stringBuilder.append(". ");
+			stringBuilder.append("The dataset density is about ").append(averageTransactionLength).append(" / ").append(differentEvents.size()).append(" = ")
+				.append(averageTransactionLength * 100 / differentEvents.size()).append("%. ");
 		}
 		else if (1 == transactionCount)
 			stringBuilder.append(prefix instanceof String ? prefix : "Collected ").append("1 transaction, whose transaction ID is ")
 				.append(this.transactions.get(0).tid).append(", from ").append(Formatter.escapeString(inputFilePath)).append(". This transaction contains ")
-				.append(this.transactions.get(0).size()).append("event(s). Its TTF is ").append(this.transactions.get(0).ttf).append(". ");
+				.append(this.transactions.get(0).size()).append("event(s). Its TTF is ").append(this.transactions.get(0).ttf).append(". The dataset density is 100%. ");
 		else
 			stringBuilder.append("No transactions were collected from ").append(Formatter.escapeString(inputFilePath)).append(". ");
 		return stringBuilder.toString();
@@ -1130,6 +1140,11 @@ class AlgorithmTHUI extends Algorithm<AlgorithmTHUI.Transaction>
 		int size()
 		{
 			return items.size();
+		}
+		@Override
+		LinkedHashSet<Integer> keySet()
+		{
+			return new LinkedHashSet<Integer>(items.keySet());
 		}
 		boolean contains(Integer item)
 		{
@@ -1906,6 +1921,11 @@ class AlgorithmTTFE extends Algorithm<AlgorithmTTFE.Transaction>
 		int size()
 		{
 			return events.size();
+		}
+		@Override
+		LinkedHashSet<Integer> keySet()
+		{
+			return new LinkedHashSet<Integer>(events.keySet());
 		}
 		boolean contains(Integer item)
 		{
