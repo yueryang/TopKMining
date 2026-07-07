@@ -311,8 +311,8 @@ jobs:
             echo ""
             case "${{ steps.ready.outputs.mainFileName }}" in
               "accidents")
-                echo "\$ java TopKMining.java -d 0.8 -i \"${{ matrix.dataset }}\" -l Debug -m 0.1 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
-                java TopKMining.java -d 0.8 -i "${{ matrix.dataset }}" -l Debug -m 0.1 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+                echo "\$ java TopKMining.java -d 0.9 -i \"${{ matrix.dataset }}\" -l Debug -m 0.1 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+                java TopKMining.java -d 0.9 -i "${{ matrix.dataset }}" -l Debug -m 0.1 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
                 ;;
               "connect")
                 echo "\$ java TopKMining.java -d 0.9 -i \"${{ matrix.dataset }}\" -l Debug -m 0.01 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
@@ -331,8 +331,8 @@ jobs:
                 java TopKMining.java -d 0.9 -i "${{ matrix.dataset }}" -l Debug -m 0.002 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
                 ;;
               "retail")
-                echo "\$ java TopKMining.java -d 0.8 -i \"${{ matrix.dataset }}\" -l Debug -m 0.002 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
-                java TopKMining.java -d 0.8 -i "${{ matrix.dataset }}" -l Debug -m 0.002 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
+                echo "\$ java TopKMining.java -d 0.9 -i \"${{ matrix.dataset }}\" -l Debug -m 0.005 -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
+                java TopKMining.java -d 0.9 -i "${{ matrix.dataset }}" -l Debug -m 0.005 -o "${{ steps.ready.outputs.outputFilePath }}" -r ${{ steps.ready.outputs.runCount }}
                 ;;
               *)
                 echo "\$ java TopKMining.java -i \"${{ matrix.dataset }}\" -l Debug -o \"${{ steps.ready.outputs.outputFilePath }}\" -r ${{ steps.ready.outputs.runCount }}"
