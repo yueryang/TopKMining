@@ -273,9 +273,9 @@ class Parser
 	}
 	private static void printHelp()
 	{
-		System.out.println("This is a runCountner for multiple top-$k$ mining algorithms. ");
+		System.out.println("This is a runner for multiple top-$k$ mining algorithms. ");
 		System.out.println();
-		System.out.println("Options:");
+		System.out.println("Options: ");
 		System.out.println("\t" + Formatter.array2String(HelpArguments) + "\t\tPrint this help document. ");
 		System.out.println(
 			"\t" + Formatter.array2String(DeltaRatioArguments) + " <deltaRatio>\t\tSpecify the delta ratio for static threshold algorithms, "
