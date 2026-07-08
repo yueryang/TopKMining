@@ -348,8 +348,8 @@ class Drawers:
 				)
 			elif "$\\delta^*$" == metric:
 				return (
-					"The minimum threshold $\\delta^*$ value comparison results for different $k$ values when $\\alpha = \\beta = 0.5$. "
-					+ "The TTFE algorithm achieves the highest minimum threshold $\\delta^*$ values in most cases. "
+					"The final minimum threshold $\\delta^*$ value comparison results for different $k$ values when $\\alpha = \\beta = 0.5$. "
+					+ "The TTFE algorithm achieves the highest final minimum threshold $\\delta^*$ values in most cases. "
 				)
 			else:
 				return "The comparison resutls. "
@@ -426,11 +426,11 @@ class Drawers:
 										optimalValue = matrix[rowIndex][independentVariableIndex]
 								for rowIndex in range(algorithmCount):
 									if optimalValue is None or not compare(optimalValue, matrix[rowIndex][independentVariableIndex]):
-										matrix[rowIndex][independentVariableIndex] = "\\textbf{{${0}$}}".format(
+										matrix[rowIndex][independentVariableIndex] = "\\textbf{{{0}}}".format(
 											formatValue(matrix[rowIndex][independentVariableIndex], outerKey)
 										)
 									else:
-										matrix[rowIndex][independentVariableIndex] = "${0}$".format(formatValue(matrix[rowIndex][independentVariableIndex], outerKey))
+										matrix[rowIndex][independentVariableIndex] = "{0}".format(formatValue(matrix[rowIndex][independentVariableIndex], outerKey))
 							f.write("\t\t\t\\midrule\n")
 							emptyCell = False
 							for rowIndex, innerKey in enumerate(middleValue.keys()):

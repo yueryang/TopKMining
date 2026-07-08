@@ -1876,11 +1876,13 @@ class AlgorithmTHUFI extends Algorithm<AlgorithmTHUFI.Transaction>
 		else if (frequencyMetrics[1] != null)
 			peakMemory = (Long)frequencyMetrics[1];
 		if (utilityMetrics[2] != null && (double)utilityMetrics[2] != Double.NEGATIVE_INFINITY && frequencyMetrics[2] != null && (double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
-			this.delta = Math.min((Double)utilityMetrics[2], (Double)frequencyMetrics[2]);
+			this.delta = Math.min(utilityMetrics[2].doubleValue(), frequencyMetrics[2].doubleValue());
 		else if (utilityMetrics[2] != null && (double)utilityMetrics[2] != Double.NEGATIVE_INFINITY)
-			this.delta = (Double)utilityMetrics[2];
+			this.delta = utilityMetrics[2].doubleValue();
 		else if (frequencyMetrics[2] != null && (double)frequencyMetrics[2] != Double.NEGATIVE_INFINITY)
-			this.delta = (Double)frequencyMetrics[2];
+			this.delta = frequencyMetrics[2].doubleValue();
+		else
+			this.delta = Double.NEGATIVE_INFINITY;
 		
 		return new Number[] { endTime - startTime, peakMemory, this.delta };
 	}
