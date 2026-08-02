@@ -1,0 +1,16 @@
+digraph g {
+	node [shape=plain]
+	g [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>g</i></td></tr><tr><td port="f1">83.5</td></tr><tr><td port="f2">9.5</td></tr><tr><td port="f3">74.0</td></tr><tr><td port="f4">6</td></tr></table>>]
+	ga [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ga</i></td></tr><tr><td port="f1">41.0</td></tr><tr><td port="f2">11.5</td></tr><tr><td port="f3">29.5</td></tr><tr><td port="f4">0</td></tr></table>>]
+	g:f4 -> ga:f0
+	ge [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ge</i></td></tr><tr><td port="f1">20.0</td></tr><tr><td port="f2">4.5</td></tr><tr><td port="f3">15.5</td></tr><tr><td port="f4">0</td></tr></table>>]
+	g:f4 -> ge:f0
+	gd [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>gd</i></td></tr><tr><td port="f1">22.5</td></tr><tr><td port="f2">10.5</td></tr><tr><td port="f3">12.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	g:f4 -> gd:f0
+	gc [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>gc</i></td></tr><tr><td port="f1">66.5</td></tr><tr><td port="f2">38.5</td></tr><tr><td port="f3">28.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	g:f4 -> gc:f0
+	gf [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>gf</i></td></tr><tr><td port="f1">30.5</td></tr><tr><td port="f2">17.0</td></tr><tr><td port="f3">13.5</td></tr><tr><td port="f4">0</td></tr></table>>]
+	g:f4 -> gf:f0
+	gb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>gb</i></td></tr><tr><td port="f1">24.0</td></tr><tr><td port="f2">24.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	g:f4 -> gb:f0
+}

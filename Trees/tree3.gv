@@ -1,0 +1,10 @@
+digraph c {
+	node [shape=plain]
+	c [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>c</i></td></tr><tr><td port="f1">134.0</td></tr><tr><td port="f2">45.5</td></tr><tr><td port="f3">88.5</td></tr><tr><td port="f4">2</td></tr></table>>]
+	cf [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>cf</i></td></tr><tr><td port="f1">122.0</td></tr><tr><td port="f2">73.5</td></tr><tr><td port="f3">48.5</td></tr><tr><td port="f4">1</td></tr></table>>]
+	c:f4 -> cf:f0
+	cfb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>cfb</i></td></tr><tr><td port="f1">106.5</td></tr><tr><td port="f2">106.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	cf:f4 -> cfb:f0
+	cb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>cb</i></td></tr><tr><td port="f1">85.5</td></tr><tr><td port="f2">85.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	c:f4 -> cb:f0
+}

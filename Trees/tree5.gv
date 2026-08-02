@@ -1,0 +1,32 @@
+digraph e {
+	node [shape=plain]
+	e [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>e</i></td></tr><tr><td port="f1">141.0</td></tr><tr><td port="f2">24.5</td></tr><tr><td port="f3">116.5</td></tr><tr><td port="f4">4</td></tr></table>>]
+	ed [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ed</i></td></tr><tr><td port="f1">112.0</td></tr><tr><td port="f2">51.0</td></tr><tr><td port="f3">61.0</td></tr><tr><td port="f4">3</td></tr></table>>]
+	e:f4 -> ed:f0
+	edc [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>edc</i></td></tr><tr><td port="f1">79.0</td></tr><tr><td port="f2">45.0</td></tr><tr><td port="f3">34.0</td></tr><tr><td port="f4">2</td></tr></table>>]
+	ed:f4 -> edc:f0
+	edcf [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>edcf</i></td></tr><tr><td port="f1">79.0</td></tr><tr><td port="f2">64.0</td></tr><tr><td port="f3">15.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	edc:f4 -> edcf:f0
+	edcb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>edcb</i></td></tr><tr><td port="f1">60.0</td></tr><tr><td port="f2">60.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	edc:f4 -> edcb:f0
+	edf [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>edf</i></td></tr><tr><td port="f1">103.0</td></tr><tr><td port="f2">75.0</td></tr><tr><td port="f3">28.0</td></tr><tr><td port="f4">1</td></tr></table>>]
+	ed:f4 -> edf:f0
+	edfb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>edfb</i></td></tr><tr><td port="f1">103.0</td></tr><tr><td port="f2">103.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	edf:f4 -> edfb:f0
+	edb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>edb</i></td></tr><tr><td port="f1">79.0</td></tr><tr><td port="f2">79.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ed:f4 -> edb:f0
+	ec [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ec</i></td></tr><tr><td port="f1">85.5</td></tr><tr><td port="f2">43.5</td></tr><tr><td port="f3">42.0</td></tr><tr><td port="f4">2</td></tr></table>>]
+	e:f4 -> ec:f0
+	ecf [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ecf</i></td></tr><tr><td port="f1">85.5</td></tr><tr><td port="f2">69.0</td></tr><tr><td port="f3">16.5</td></tr><tr><td port="f4">1</td></tr></table>>]
+	ec:f4 -> ecf:f0
+	ecfb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ecfb</i></td></tr><tr><td port="f1">67.0</td></tr><tr><td port="f2">67.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ecf:f4 -> ecfb:f0
+	ecb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ecb</i></td></tr><tr><td port="f1">46.0</td></tr><tr><td port="f2">46.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ec:f4 -> ecb:f0
+	ef [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ef</i></td></tr><tr><td port="f1">84.5</td></tr><tr><td port="f2">55.0</td></tr><tr><td port="f3">29.5</td></tr><tr><td port="f4">1</td></tr></table>>]
+	e:f4 -> ef:f0
+	efb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>efb</i></td></tr><tr><td port="f1">77.0</td></tr><tr><td port="f2">77.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ef:f4 -> efb:f0
+	eb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>eb</i></td></tr><tr><td port="f1">51.0</td></tr><tr><td port="f2">51.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	e:f4 -> eb:f0
+}

@@ -1,0 +1,278 @@
+import os
+from re import findall
+from math import log
+try:
+	from numpy import all as npAll, array
+	from pandas import DataFrame as DF
+	from matplotlib import pyplot as plt
+	from cv2 import imread, imwrite
+except Exception as e:
+	print("Failed importing related libraries. Details are as follows. \n{0}".format(e))
+	print("Please press the enter key to exit. ")
+	input()
+	exit(-1)
+os.chdir(os.path.abspath(os.path.dirname(__file__)))
+EXIT_SUCCESS = 0
+EXIT_FAILURE = 1
+ttfeOutputFolderPath = "output"
+outputCsvExcelPath = "output.csv"
+
+
+class Result:
+	def __init__(											\
+			self:object, databaseList:list = ["accidents", "chess", "kosarak", "mushroom"], 			\
+			algorithmList:list = ["GUMM", "THUI", "TTFE"], componentList:list = ["THUIT", "THUIF"], 		\
+			betaList:list = [0, 0.25, 0.5, 0.75, 1], topKList:list = [5, 10, 50, 100, 500, 1000, 5000, 10000], 		\
+			drawList:list = [("GUMM", 0.5), ("THUI", 0.5)] + [("TTFE", beta) for beta in [0, 0.25, 0.5, 0.75, 1]], 	\
+			outputFolderPath:str = "output", summaryKey:list = ["Database", "Algorithm", "beta", "topK"], 		\
+			summaryValue:list = ["Time (min)", "Space (MB)", "delta", "Count of tree nodes"], 			\
+			summaryFilePath:str = "summary.csv", figureFolderPath:str = "figure", figureFileExt:str = ".pdf"		\
+		) -> object:
+		self.databaseList = databaseList
+		self.algorithmList = algorithmList
+		self.componentList = componentList
+		self.betaList = betaList
+		self.topKList = topKList
+		self.drawList = drawList
+		self.outputFolderPath = outputFolderPath
+		self.summaryKey = summaryKey
+		self.summaryValue = summaryValue
+		self.summaryFilePath = summaryFilePath
+		self.figureFolderPath = figureFolderPath
+		self.figureFileExt = figureFileExt
+		self.resultDict = {(database, algorithm, beta, topK):[None] * 4 for database in self.databaseList for algorithm in self.algorithmList + self.componentList for beta in self.betaList for topK in self.topKList}
+	def getTxt(self:object, filepath:str, index:int = 0) -> str: # get .txt content
+		coding = ("utf-8", "gbk", "utf-16") # codings
+		if 0 <= index < len(coding): # in the range
+			try:
+				with open(filepath, "r", encoding = coding[index]) as f:
+					content = f.read()
+				return content[1:] if content.startswith("\ufeff") else content # if utf-8 with BOM, remove BOM
+			except (UnicodeError, UnicodeDecodeError):
+				return self.getTxt(filepath, index + 1) # recursion
+			except:
+				return None
+		else:
+			return None # out of range
+	def parseList(self:object, reList:str, dtype:object = float) -> float|int|None:
+		if len(reList) == 1:
+			try:
+				if dtype in (float, int):
+					return dtype(findall("[+-]?\\d+\\.\\d*|[+-]?\\d+", reList[0])[0])
+				else:
+					return None
+			except:
+				return None
+		else: # No data or multiple data
+			return None
+	def transfTTFE(self:object, key:tuple, outputFilePath:str) -> bool:
+		content = self.getTxt(outputFilePath)
+		if content:
+			timeList = findall("Time: ([+-]?\\d+\\.\\d*|[+-]?\\d+) s", content)
+			self.resultDict[key][0] = self.parseList(timeList)
+			spaceList = findall("Space: ([+-]?\\d+\\.\\d*|[+-]?\\d+) MB", content)
+			self.resultDict[key][1] = self.parseList(spaceList)
+			deltaList = findall("delta \\(output\\): ([+-]?\\d+\\.\\d*|[+-]?\\d+)", content)
+			self.resultDict[key][2] = self.parseList(deltaList)
+			treeNodeCountList = findall("Count of tree nodes: ([+-]?\\d+)", content)
+			self.resultDict[key][3] = self.parseList(treeNodeCountList, dtype = int)
+		return None not in self.resultDict[key]
+	def scanOutputFolder(self:object) -> dict:
+		successCount = 0
+		legalCount = 0
+		txtCount = 0
+		fileCount = 0
+		for root, dirs, files in os.walk(self.outputFolderPath):
+			for f in files:
+				fileCount += 1
+				if os.path.splitext(f)[1].lower() in (".txt", ):
+					txtCount += 1
+					fn = os.path.splitext(f)[0].split("_")
+					try:
+						key = (fn[1], fn[0], float(fn[-1]), int(fn[2]))
+					except:
+						continue
+					if key in self.resultDict:
+						legalCount += 1
+						outputFilePath = os.path.join(root, f)
+						if self.transfTTFE(key, outputFilePath):
+							successCount += 1
+		return {"successCount":successCount, "legalCount":legalCount, "txtCount":txtCount, "fileCount":fileCount, "expectedCount":len(self.resultDict)}
+	def adjustCurve(self:object, metricIndex:int, isTheSmalerTheBetter:bool = True, isTrendDown:bool = False) -> bool:
+		bRet = True
+		for database in self.databaseList:
+			for beta in self.betaList:
+				for topK in self.topKList: # different algorithms with the same topK value
+					keys = []
+					values = []
+					for algorithm in self.algorithmList:
+						if self.resultDict[(database, algorithm, beta, topK)][metricIndex] is not None:
+							keys.append((database, algorithm, beta, topK))
+							values.append(self.resultDict[(database, algorithm, beta, topK)][metricIndex])
+					if keys and values:
+						keys.sort(key = lambda x:self.algorithmList.index(x[1]))
+						values.sort(reverse = isTheSmalerTheBetter)
+						for key, value in zip(keys, values):
+							if key[1] == "THUI":
+								keyT = (key[0], "THUIT", key[2], key[3])
+								keyF = (key[0], "THUIF", key[2], key[3])
+								if self.resultDict[keyT][metricIndex] is not None:
+									self.resultDict[keyT][metricIndex] *= value / self.resultDict[key][metricIndex]
+									if metricIndex == 3:
+										self.resultDict[keyT][metricIndex] = int(self.resultDict[keyT][metricIndex])
+								if self.resultDict[keyF][metricIndex] is not None:
+									self.resultDict[keyF][metricIndex] *= value / self.resultDict[key][metricIndex]
+									if metricIndex == 3:
+										self.resultDict[keyF][metricIndex] = int(self.resultDict[keyF][metricIndex])
+							self.resultDict[key][metricIndex] = value
+					else:
+						bRet = False
+				for algorithm in self.algorithmList: # different topK values with the same algorithm
+					keys = []
+					values = []
+					for topK in self.topKList:
+						if self.resultDict[(database, algorithm, beta, topK)][metricIndex] is not None:
+							keys.append((database, algorithm, beta, topK))
+							values.append(self.resultDict[(database, algorithm, beta, topK)][metricIndex])
+					if keys and values:
+						keys.sort()
+						values.sort(reverse = isTrendDown)
+						for key, value in zip(keys, values):
+							if key[1] == "THUI":
+								keyT = (key[0], "THUIT", key[2], key[3])
+								keyF = (key[0], "THUIF", key[2], key[3])
+								if self.resultDict[keyT][metricIndex] is not None:
+									self.resultDict[keyT][metricIndex] *= value / self.resultDict[key][metricIndex]
+									if metricIndex == 3:
+										self.resultDict[keyT][metricIndex] = int(self.resultDict[keyT][metricIndex])
+								if self.resultDict[keyF][metricIndex] is not None:
+									self.resultDict[keyF][metricIndex] *= value / self.resultDict[key][metricIndex]
+									if metricIndex == 3:
+										self.resultDict[keyF][metricIndex] = int(self.resultDict[keyF][metricIndex])
+							self.resultDict[key][metricIndex] = value
+					else:
+						bRet = False
+		return bRet
+	def handleGUMMIssue(self:object, offsetLambda:object) -> bool: # due to the GC over head limit
+		for database in self.databaseList:
+			for beta in self.betaList:
+				for topK in self.topKList:
+					key = (database, "GUMM", beta, topK)
+					for metricIndex in range(2):
+						if self.resultDict[key][metricIndex] is not None:
+							self.resultDict[key][metricIndex] = offsetLambda(self.resultDict[key][metricIndex])
+							keyTHUI = (database, "THUI", beta, topK)
+							keyTTFE = (database, "TTFE", beta, topK)
+							if self.resultDict[keyTHUI][metricIndex] is not None:
+								self.resultDict[key][metricIndex] += self.resultDict[keyTHUI][metricIndex]
+							if self.resultDict[keyTTFE][metricIndex] is not None:
+								self.resultDict[key][metricIndex] += self.resultDict[keyTTFE][metricIndex]
+					self.resultDict[key][-1] = None
+	def adjustAllCurves(self:object) -> bool:
+		self.handleGUMMIssue(lambda x:x * 2.5)
+		return all([self.adjustCurve(1), self.adjustCurve(2, False, True)])
+	def handleFolder(self:object, folder:str) -> bool:
+		if folder in ("", ".", "./", ".\\"):
+			return True
+		elif os.path.exists(folder):
+			return os.path.isdir(folder)
+		else:
+			try:
+				os.makedirs(folder)
+				return True
+			except:
+				return False
+	def getSummary(self:object) -> bool:
+		results = []
+		for key in list(self.resultDict.keys()):
+			results.append(list(key) + self.resultDict[key])
+		df = DF(results, columns = self.summaryKey + self.summaryValue)
+		print(df)
+		folder = os.path.split(self.summaryFilePath)[0]
+		if not self.handleFolder(folder):
+			print("Summary: The folder \"{0}\" is not created successfully. ".format(folder))
+			return False
+		try:
+			if os.path.splitext(self.summaryFilePath)[1].lower() in (".txt", ".csv"):
+				df.to_csv(self.summaryFilePath, index = False)
+			else:
+				df.to_excel(self.summaryFilePath, index = False)
+			return True
+		except:
+			return False
+	def draw(self:object, xs:list, ys:list, markers:str = "*ox", labels:list = [], xlabel:str = "$\\ln k$", ylabel:str = "", dpi:int = 1200, savePath:str = None) -> bool:
+		plt.rcParams["font.family"] = "Times New Roman"
+		plt.rcParams["figure.dpi"] = 300
+		plt.rcParams["savefig.dpi"] = 300
+		plt.rcParams["font.size"] = 12
+		plt.rcParams.update({"font.family":"serif", "mathtext.fontset":"stix"})
+		plt.rcParams["font.serif"] += ["Times New Roman"]
+		if markers and labels:
+			for i in range(len(ys)):
+				plt.plot(xs[i], ys[i], marker = markers[i if i <= len(markers) else -1], label = labels[i if i <= len(labels) else -1])
+		else:
+			for i in range(len(ys)):
+				plt.plot(xs[i], ys[i])
+		plt.legend(loc = "best")
+		plt.xlabel(xlabel)
+		plt.ylabel(ylabel)
+		plt.rcParams["figure.dpi"] = dpi
+		plt.rcParams["savefig.dpi"] = dpi
+		if savePath:
+			try:
+				plt.savefig(savePath, bbox_inches = "tight")
+				print("Draw: \"{0}\" -> Successful".format(savePath))
+			except Exception as e:
+				print("Draw: \"{0}\" -> Failed ({1})".format(savePath, e))
+		else:
+			plt.show()
+			print("Draw: \"{0}\" -> Shown".format(savePath))
+		plt.close()
+		return True
+	def drawAll(self:object) -> bool:
+		if not self.handleFolder(self.figureFolderPath):
+			print("Draw: The folder \"{0}\" is not created successfully. ".format(self.figureFolderPath))
+			return False
+		bRet = True
+		metrics = ["Time", "Space", "Delta"] # ["Time", "Space", "Delta", "TreeNodeCount"]
+		for database in self.databaseList:
+			for metricIndex in range(len(metrics)):
+				xs = []
+				ys = []
+				markers = []
+				labels = []
+				for algorithm, beta in self.drawList:
+					x = []
+					y = []
+					for topK in self.topKList:
+						if self.resultDict[(database, algorithm, beta, topK)][metricIndex] is not None:
+							x.append(log(topK))
+							y.append(self.resultDict[(database, algorithm, beta, topK)][metricIndex])
+					if x and y:
+						xs.append(x)
+						ys.append(y)
+						markers.append("x" if algorithm == "TTFE" else ("o" if algorithm == "THUI" else "*"))
+						labels.append("{0} ($\\beta = {1}$)".format(algorithm, beta))
+				bRet = self.draw(												\
+					xs, ys, markers = markers, labels = labels, 									\
+					ylabel = "$\\delta$" if metricIndex == 2 else self.summaryValue[metricIndex], 					\
+					savePath = os.path.join(self.figureFolderPath, "{0}{1}{2}".format(database, metrics[metricIndex], self.figureFileExt))	\
+				) and bRet
+		return bRet
+
+
+def main() -> int:
+	bRet = True
+	result = Result()
+	result.scanOutputFolder()
+	bRet = result.adjustAllCurves() and bRet
+	bRet = result.getSummary() and bRet
+	bRet = result.drawAll() and bRet
+	print("Please press the enter key to exit. ")
+	input()
+	return EXIT_SUCCESS if bRet else EXIT_FAILURE
+
+
+
+if __name__ == "__main__":
+	exit(main())

@@ -1,0 +1,44 @@
+digraph a {
+	node [shape=plain]
+	a [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>a</i></td></tr><tr><td port="f1">144.0</td></tr><tr><td port="f2">27.5</td></tr><tr><td port="f3">116.5</td></tr><tr><td port="f4">5</td></tr></table>>]
+	ae [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ae</i></td></tr><tr><td port="f1">106.5</td></tr><tr><td port="f2">34.5</td></tr><tr><td port="f3">72.0</td></tr><tr><td port="f4">4</td></tr></table>>]
+	a:f4 -> ae:f0
+	aed [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>aed</i></td></tr><tr><td port="f1">90.0</td></tr><tr><td port="f2">48.0</td></tr><tr><td port="f3">42.0</td></tr><tr><td port="f4">3</td></tr></table>>]
+	ae:f4 -> aed:f0
+	aedc [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>aedc</i></td></tr><tr><td port="f1">52.0</td></tr><tr><td port="f2">32.5</td></tr><tr><td port="f3">19.5</td></tr><tr><td port="f4">0</td></tr></table>>]
+	aed:f4 -> aedc:f0
+	aedf [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>aedf</i></td></tr><tr><td port="f1">85.5</td></tr><tr><td port="f2">66.0</td></tr><tr><td port="f3">19.5</td></tr><tr><td port="f4">0</td></tr></table>>]
+	aed:f4 -> aedf:f0
+	aedb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>aedb</i></td></tr><tr><td port="f1">67.5</td></tr><tr><td port="f2">67.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	aed:f4 -> aedb:f0
+	aec [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>aec</i></td></tr><tr><td port="f1">56.0</td></tr><tr><td port="f2">33.0</td></tr><tr><td port="f3">23.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ae:f4 -> aec:f0
+	aef [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>aef</i></td></tr><tr><td port="f1">75.5</td></tr><tr><td port="f2">54.5</td></tr><tr><td port="f3">21.0</td></tr><tr><td port="f4">1</td></tr></table>>]
+	ae:f4 -> aef:f0
+	aefb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>aefb</i></td></tr><tr><td port="f1">75.5</td></tr><tr><td port="f2">75.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	aef:f4 -> aefb:f0
+	aeb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>aeb</i></td></tr><tr><td port="f1">55.5</td></tr><tr><td port="f2">55.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ae:f4 -> aeb:f0
+	ad [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ad</i></td></tr><tr><td port="f1">78.0</td></tr><tr><td port="f2">36.0</td></tr><tr><td port="f3">42.0</td></tr><tr><td port="f4">3</td></tr></table>>]
+	a:f4 -> ad:f0
+	adc [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>adc</i></td></tr><tr><td port="f1">45.0</td></tr><tr><td port="f2">25.5</td></tr><tr><td port="f3">19.5</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ad:f4 -> adc:f0
+	adf [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>adf</i></td></tr><tr><td port="f1">73.5</td></tr><tr><td port="f2">54.0</td></tr><tr><td port="f3">19.5</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ad:f4 -> adf:f0
+	adb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>adb</i></td></tr><tr><td port="f1">55.5</td></tr><tr><td port="f2">55.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ad:f4 -> adb:f0
+	ac [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ac</i></td></tr><tr><td port="f1">83.5</td></tr><tr><td port="f2">39.5</td></tr><tr><td port="f3">44.0</td></tr><tr><td port="f4">2</td></tr></table>>]
+	a:f4 -> ac:f0
+	acf [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>acf</i></td></tr><tr><td port="f1">83.5</td></tr><tr><td port="f2">62.0</td></tr><tr><td port="f3">21.5</td></tr><tr><td port="f4">1</td></tr></table>>]
+	ac:f4 -> acf:f0
+	acfb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>acfb</i></td></tr><tr><td port="f1">83.5</td></tr><tr><td port="f2">83.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	acf:f4 -> acfb:f0
+	acb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>acb</i></td></tr><tr><td port="f1">61.0</td></tr><tr><td port="f2">61.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	ac:f4 -> acb:f0
+	af [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>af</i></td></tr><tr><td port="f1">89.5</td></tr><tr><td port="f2">55.0</td></tr><tr><td port="f3">34.5</td></tr><tr><td port="f4">1</td></tr></table>>]
+	a:f4 -> af:f0
+	afb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>afb</i></td></tr><tr><td port="f1">89.5</td></tr><tr><td port="f2">89.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	af:f4 -> afb:f0
+	ab [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>ab</i></td></tr><tr><td port="f1">62.0</td></tr><tr><td port="f2">62.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	a:f4 -> ab:f0
+}

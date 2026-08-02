@@ -1,0 +1,4 @@
+digraph b {
+	node [shape=plain]
+	b [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>b</i></td></tr><tr><td port="f1">64.0</td></tr><tr><td port="f2">64.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+}

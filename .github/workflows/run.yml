@@ -118,6 +118,9 @@ on:
           - '3.14'
           - '3.15'
 
+permissions:
+  contents: read
+
 jobs:
   prepare:
     runs-on: ubuntu-latest

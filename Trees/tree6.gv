@@ -1,0 +1,6 @@
+digraph f {
+	node [shape=plain]
+	f [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>f</i></td></tr><tr><td port="f1">104.0</td></tr><tr><td port="f2">42.5</td></tr><tr><td port="f3">61.5</td></tr><tr><td port="f4">1</td></tr></table>>]
+	fb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>fb</i></td></tr><tr><td port="f1">99.5</td></tr><tr><td port="f2">99.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	f:f4 -> fb:f0
+}

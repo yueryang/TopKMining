@@ -1,0 +1,18 @@
+digraph d {
+	node [shape=plain]
+	d [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>d</i></td></tr><tr><td port="f1">152.0</td></tr><tr><td port="f2">52.5</td></tr><tr><td port="f3">99.5</td></tr><tr><td port="f4">3</td></tr></table>>]
+	dc [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>dc</i></td></tr><tr><td port="f1">124.0</td></tr><tr><td port="f2">64.5</td></tr><tr><td port="f3">59.5</td></tr><tr><td port="f4">2</td></tr></table>>]
+	d:f4 -> dc:f0
+	dcf [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>dcf</i></td></tr><tr><td port="f1">106.0</td></tr><tr><td port="f2">72.5</td></tr><tr><td port="f3">33.5</td></tr><tr><td port="f4">1</td></tr></table>>]
+	dc:f4 -> dcf:f0
+	dcfb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>dcfb</i></td></tr><tr><td port="f1">106.0</td></tr><tr><td port="f2">106.0</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	dcf:f4 -> dcfb:f0
+	dcb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>dcb</i></td></tr><tr><td port="f1">100.5</td></tr><tr><td port="f2">100.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	dc:f4 -> dcb:f0
+	df [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>df</i></td></tr><tr><td port="f1">121.5</td></tr><tr><td port="f2">75.0</td></tr><tr><td port="f3">46.5</td></tr><tr><td port="f4">1</td></tr></table>>]
+	d:f4 -> df:f0
+	dfb [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>dfb</i></td></tr><tr><td port="f1">121.5</td></tr><tr><td port="f2">121.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	df:f4 -> dfb:f0
+	db [label=<<table border="1" cellspacing="0"><tr><td port="f0"><i>db</i></td></tr><tr><td port="f1">101.5</td></tr><tr><td port="f2">101.5</td></tr><tr><td port="f3">0.0</td></tr><tr><td port="f4">0</td></tr></table>>]
+	d:f4 -> db:f0
+}
